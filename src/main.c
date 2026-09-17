@@ -23,7 +23,7 @@ int main(void)
 //    uartinterruptInit();
     consoleUartInit();
     ledInit();
-//    timerInitA0();
+    timerInitA0();
 //    while(1){
 //        led_switch();
 //    }

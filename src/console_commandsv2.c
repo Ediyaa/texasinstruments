@@ -48,13 +48,10 @@ static const command_t led_static_cmds[] = {
     { NULL,          NULL,        NULL, NULL, NULL,        NULL        }
 };
 
-static void led_blinktoggle(void);
-
 static const command_t led_dynamic_cmds[] = {
     { "led_blink",   led_blink,   NULL, NULL, "BLINK - ON",        "press any button to cancel." },
     { "led_blinksw", led_blinksw, NULL, NULL, "blinkswitch - ON.", "press any button to cancel"  },
     { "stop",        stop,        NULL, NULL, "stop.",             NULL                          },
-    { "led_blinktoggle", led_blinktoggle, NULL, NULL, NULL,        NULL                          },
     { NULL,          NULL,        NULL, NULL, NULL,                NULL                          }
 };
 
@@ -69,7 +66,7 @@ static const command_t timer_cmds[] = {
     { "setdimmf_",  NULL, setDimmf,  "<INTEGER[1,4]>", NULL, NULL },
     { "setdimm_",   NULL, setDimm,   "<INTEGER[1,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
-    { "pwmtoggle",  ledblinktoggle, NULL, NULL, "PWM toggled.", NULL },
+    { "pwmtoggle",  pwmtoggle,      NULL, NULL, "PWM toggled.", NULL },
     { NULL,        NULL, NULL,     NULL,            NULL, NULL }
 };
 
@@ -246,56 +243,27 @@ static void setTimer(unsigned int wert){
 
 static void setDimmf(unsigned int wert){
 
+    static const char *const freq[] = { "1024Hz", "2048Hz", "4096Hz", "8192Hz" };
+
     if (wert < 1 || wert > 4){
         system();
         sends("invalid argument for: ");
         red();
-        sends("setdimm_");
+        sends("setdimmf_");
         linebreak(1);
         return;
     }
-    if (wert == 1){
-        TA0CCR0 = 1024;
-        TA0CCR1 = 512;
-        system();
-        sends("dimm frequency set to: 1024Hz");
-        cyan();
-        sendNum(wert);
-        standardColour();
-        linebreak(1);
-    }
-    else if (wert == 2){
-        TA0CCR0 = 512;
-        TA0CCR1 = 256;
-        system();
-        sends("dimm frequency set to: 2048Hz");
-        cyan();
-        sendNum(wert);
-        standardColour();
-        linebreak(1);
-    }
-    else if (wert == 3){
-        TA0CCR0 = 256;
-        TA0CCR1 = 128;
-        system();
-        sends("dimm frequency set to: 4096Hz");
-        cyan();
-        sendNum(wert);
-        standardColour();
-        linebreak(1);
-    }
-    else if (wert == 4){
-        TA0CCR0 = 128;
-        TA0CCR1 = 64;
-        system();
-        sends("dimm frequency set to: 8192Hz");
-        cyan();
-        sendNum(wert);
-        standardColour();
-        linebreak(1);
-    }
 
+    timerSetDimmf(wert);
+
+    system();
+    sends("dimm frequency set to: ");
+    cyan();
+    sends(freq[wert - 1]);
+    standardColour();
+    linebreak(1);
 }
+
 static void setDimm(unsigned int wert){
 
     if (wert < 1 || wert > 100){
@@ -306,6 +274,8 @@ static void setDimm(unsigned int wert){
         linebreak(1);
         return;
     }
+
+    timersetDimm(wert);
 
     system();
     sends("dimm set to: ");
@@ -327,22 +297,4 @@ static void statuspwm(void){
     sendNum(TA0CCR1);
     standardColour();
     sends("\r\n");
-}
-
-/* Schaltet den dynamischen Blink-Modus um: aus led_func_stat==0
- * wird geblinkt, sonst gestoppt. Nutzt die main.c-Funktionen,
- * die led_func_stat bereits kennen. */
-static void led_blinktoggle(void){
-
-    if (led_func_stat == 0){
-        led_blink();
-        system();
-        sends("BLINK - ON");
-    }
-    else {
-        stop();
-        system();
-        sends("BLINK - OFF");
-    }
-    linebreak(1);
 }
