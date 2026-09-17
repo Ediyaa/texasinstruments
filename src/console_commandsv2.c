@@ -1,3 +1,4 @@
+#include <msp430.h>
 
 #include "include/console.h"
 #include "include/console_commandlinetools.h"
@@ -20,6 +21,7 @@ typedef struct {
     const char  *name;
     commandFn    handler;     /* NULL = kein Aufruf, nur Ausgabe        */
     commandArgFn argHandler;  /* != NULL = Befehl erwartet eine Zahl    */
+    const char  *argHint;     /* Hilfetext bei argHandler, z.B. "<zahl>"*/
     const char  *msg1;        /* NULL = keine Ausgabe                   */
     const char  *msg2;
 } command_t;
@@ -32,39 +34,43 @@ typedef struct {
 ////////////////////////////////////////////////////////////////////////
 
 static const command_t general_cmds[] = {
-    { "help",  listCommands, NULL, NULL,             NULL },
-    { "about", status,       NULL, NULL,             NULL },
-    { "hallo", NULL,         NULL, "Hallo zurueck.", NULL },
-    { "clear", clear,        NULL, NULL,             NULL },
-    { NULL,    NULL,         NULL, NULL,             NULL }
+    { "help",  listCommands, NULL, NULL, NULL,             NULL },
+    { "about", status,       NULL, NULL, NULL,             NULL },
+    { "hallo", NULL,         NULL, NULL, "Hallo zurueck.", NULL },
+    { "clear", clear,        NULL, NULL, NULL,             NULL },
+    { NULL,    NULL,         NULL, NULL, NULL,             NULL }
 };
 
 static const command_t led_static_cmds[] = {
-    { "led_rot_an",  led_rot_an,  NULL, "RED - ON",  NULL        },
-    { "led_rot_aus", led_rot_aus, NULL, "RED - OFF", NULL        },
-    { "led_grn_an",  led_grn_an,  NULL, "GRN - ON",  NULL        },
-    { "led_grn_aus", led_grn_aus, NULL, "GRN - OFF", NULL        },
-    { "led_an",      led_an,      NULL, "RED - ON",  "GRN - ON"  },
-    { "led_aus",     led_aus,     NULL, "RED - OFF", "GRN - OFF" },
-    { "led_switch",  led_switch,  NULL, NULL,        NULL        },
-    { NULL,          NULL,        NULL, NULL,        NULL        }
+    { "led_rot_an",  led_rot_an,  NULL, NULL, "RED - ON",  NULL        },
+    { "led_rot_aus", led_rot_aus, NULL, NULL, "RED - OFF", NULL        },
+    { "led_grn_an",  led_grn_an,  NULL, NULL, "GRN - ON",  NULL        },
+    { "led_grn_aus", led_grn_aus, NULL, NULL, "GRN - OFF", NULL        },
+    { "led_an",      led_an,      NULL, NULL, "RED - ON",  "GRN - ON"  },
+    { "led_aus",     led_aus,     NULL, NULL, "RED - OFF", "GRN - OFF" },
+    { "led_switch",  led_switch,  NULL, NULL, NULL,        NULL        },
+    { NULL,          NULL,        NULL, NULL, NULL,        NULL        }
 };
 
 static const command_t led_dynamic_cmds[] = {
-    { "led_blink",   led_blink,   NULL, "BLINK - ON",        "press any button to cancel." },
-    { "led_blinksw", led_blinksw, NULL, "blinkswitch - ON.", "press any button to cancel"  },
-    { "stop",        stop,        NULL, "stop.",             NULL                          },
-    { NULL,          NULL,        NULL, NULL,                NULL                          }
+    { "led_blink",   led_blink,   NULL, NULL, "BLINK - ON",        "press any button to cancel." },
+    { "led_blinksw", led_blinksw, NULL, NULL, "blinkswitch - ON.", "press any button to cancel"  },
+    { "stop",        stop,        NULL, NULL, "stop.",             NULL                          },
+    { NULL,          NULL,        NULL, NULL, NULL,                NULL                          }
 };
 
 static void setTimer(unsigned int wert);
+static void setDimmf(unsigned int wert);
 static void setDimm(unsigned int wert);
+static void statuspwm(void);
 
 
 static const command_t timer_cmds[] = {
-    { "settimer_", NULL, setTimer, NULL, NULL },
-    { "setdimm_",  NULL, setDimm,  NULL, NULL },
-    { NULL,        NULL, NULL,     NULL, NULL }
+    { "settimer_", NULL, setTimer, "<INTEGER[1,100]>",        NULL, NULL },
+    { "setdimmf_",  NULL, setDimmf,  "<INTEGER[1,4]>", NULL, "1024 2048 4096 8192" },
+    { "setdimm_",   NULL, setDimm,   "<INTEGER[1,100]>", NULL, NULL },
+    { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
+    { NULL,        NULL, NULL,     NULL,            NULL, NULL }
 };
 
 static const commandGroup_t groups[] = {
@@ -199,8 +205,8 @@ static void printGroup(const commandGroup_t *gruppe){
         cyan();
         sends(gruppe->entries[i].name);
 
-        if (gruppe->entries[i].argHandler != NULL){
-            sends("<zahl(1-100)>");
+        if (gruppe->entries[i].argHint != NULL){
+            sends(gruppe->entries[i].argHint);
         }
 
         linebreak(1);
@@ -220,10 +226,105 @@ void listCommands(void){
 
 static void setTimer(unsigned int wert){
 
+
+    if (wert < 1 || wert > 100){
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("settimer_");
+        linebreak(1);
+        return;
+    }
+
     system();
     sends("timer set to: ");
     cyan();
     sendNum(wert);
     standardColour();
     linebreak(1);
+}
+
+static void setDimmf(unsigned int wert){
+
+    if (wert < 1 || wert > 4){
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("setdimm_");
+        linebreak(1);
+        return;
+    }
+    if (wert == 1){
+        TA0CCR0 = 1024;
+        TA0CCR1 = 512;
+        system();
+        sends("dimm frequency set to: 1024Hz");
+        cyan();
+        sendNum(wert);
+        standardColour();
+        linebreak(1);
+    }
+    else if (wert == 2){
+        TA0CCR0 = 512;
+        TA0CCR1 = 256;
+        system();
+        sends("dimm frequency set to: 2048Hz");
+        cyan();
+        sendNum(wert);
+        standardColour();
+        linebreak(1);
+    }
+    else if (wert == 3){
+        TA0CCR0 = 256;
+        TA0CCR1 = 128;
+        system();
+        sends("dimm frequency set to: 4096Hz");
+        cyan();
+        sendNum(wert);
+        standardColour();
+        linebreak(1);
+    }
+    else if (wert == 4){
+        TA0CCR0 = 128;
+        TA0CCR1 = 64;
+        system();
+        sends("dimm frequency set to: 8192Hz");
+        cyan();
+        sendNum(wert);
+        standardColour();
+        linebreak(1);
+    }
+
+}
+static void setDimm(unsigned int wert){
+
+    if (wert < 1 || wert > 100){
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("setdimm_");
+        linebreak(1);
+        return;
+    }
+
+    system();
+    sends("dimm set to: ");
+    cyan();
+    sendNum(wert);
+    standardColour();
+    linebreak(1);
+}
+static void statuspwm(void){
+    blue();
+    sends("PWM:\r\n");
+    sends("Freq:  ");
+    cyan();
+    sendNum(TA0CCR0);
+    standardColour();
+    sends("\r\n");
+    sends("Duty:  ");
+    cyan();
+    sendNum(TA0CCR1);
+    standardColour();
+    sends("\r\n");
 }
