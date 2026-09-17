@@ -197,7 +197,7 @@ static void printGroup(const commandGroup_t *gruppe){
         sends(gruppe->entries[i].name);
 
         if (gruppe->entries[i].argHandler != NULL){
-            sends("<zahl>");
+            sends("<zahl(1-100)>");
         }
 
         linebreak(1);

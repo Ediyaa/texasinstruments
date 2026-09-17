@@ -7,8 +7,8 @@
 
 void timerInitA0(void){
 
-    TA0CCR0 = 255;
-    TA0CCR1 = 5;
+    TA0CCR0 = 1024;
+    TA0CCR1 = 512;
 
     TA0CTL = TASSEL__SMCLK | ID_0 | MC_1 | TACLR;
 
