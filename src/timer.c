@@ -53,7 +53,7 @@ void timersetDimm (unsigned int wert){
     return;
 
 }
-void ledblinktoggle(void){
+void pwmtoggle(void){
     if (toggle == 0){
         toggle = 1;
     }

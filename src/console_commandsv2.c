@@ -4,6 +4,7 @@
 #include "include/console_commandlinetools.h"
 #include "include/console_commands.h"
 #include "include/led.h"
+#include "include/timer.h"
 #include "string.h"
 #include <stdbool.h>
 
@@ -68,6 +69,7 @@ static const command_t timer_cmds[] = {
     { "setdimmf_",  NULL, setDimmf,  "<INTEGER[1,4]>", NULL, NULL },
     { "setdimm_",   NULL, setDimm,   "<INTEGER[1,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
+    { "pwmtoggle",  ledblinktoggle, NULL, NULL, "PWM toggled.", NULL },
     { NULL,        NULL, NULL,     NULL,            NULL, NULL }
 };
 

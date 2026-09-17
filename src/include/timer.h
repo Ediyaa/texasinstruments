@@ -3,6 +3,6 @@
 
 void timerInitA0(void);
 
-
+void ledblinktoggle(void);
 
 #endif /* SRC_INCLUDE_TIMER_H_ */
