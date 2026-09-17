@@ -14,6 +14,7 @@ static const char *const general[] = {
                                       "help",
                                       "about",
                                       "hallo",
+                                      "clear",
                                       NULL
 };
 

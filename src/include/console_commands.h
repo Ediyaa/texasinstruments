@@ -3,7 +3,7 @@
 
 void commands(char *eingabe);
 
-void listCommandGroups(const char *const *gruppe);
+void listCommandGroup(const char *const *gruppe);
 
 void listCommands(void);
 
