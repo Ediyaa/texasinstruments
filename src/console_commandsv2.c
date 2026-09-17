@@ -58,9 +58,12 @@ static const command_t led_dynamic_cmds[] = {
 };
 
 static void setTimer(unsigned int wert);
+static void setDimm(unsigned int wert);
+
 
 static const command_t timer_cmds[] = {
     { "settimer_", NULL, setTimer, NULL, NULL },
+    { "setdimm_",  NULL, setDimm,  NULL, NULL },
     { NULL,        NULL, NULL,     NULL, NULL }
 };
 
