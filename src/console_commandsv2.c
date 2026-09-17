@@ -4,6 +4,7 @@
 #include "include/console_commands.h"
 #include "include/led.h"
 #include "string.h"
+#include <stdbool.h>
 
 /* Definiert in main.c. Gehoeren eigentlich in einen eigenen Header. */
 extern void led_blink(void);
@@ -13,12 +14,14 @@ extern void stop(void);
 ////////////////////////////////////////////////////////////////////////
 
 typedef void (*commandFn)(void);
+typedef void (*commandArgFn)(unsigned int);
 
 typedef struct {
-    const char *name;
-    commandFn   handler;   /* NULL = kein Aufruf, nur Ausgabe */
-    const char *msg1;      /* NULL = keine Ausgabe           */
-    const char *msg2;
+    const char  *name;
+    commandFn    handler;     /* NULL = kein Aufruf, nur Ausgabe        */
+    commandArgFn argHandler;  /* != NULL = Befehl erwartet eine Zahl    */
+    const char  *msg1;        /* NULL = keine Ausgabe                   */
+    const char  *msg2;
 } command_t;
 
 typedef struct {
@@ -29,39 +32,87 @@ typedef struct {
 ////////////////////////////////////////////////////////////////////////
 
 static const command_t general_cmds[] = {
-    { "help",  listCommands, NULL,             NULL },
-    { "about", status,       NULL,             NULL },
-    { "hallo", NULL,         "Hallo zurueck.", NULL },
-    { "clear", clear,        NULL,             NULL },
-    { NULL,    NULL,         NULL,             NULL }
+    { "help",  listCommands, NULL, NULL,             NULL },
+    { "about", status,       NULL, NULL,             NULL },
+    { "hallo", NULL,         NULL, "Hallo zurueck.", NULL },
+    { "clear", clear,        NULL, NULL,             NULL },
+    { NULL,    NULL,         NULL, NULL,             NULL }
 };
 
 static const command_t led_static_cmds[] = {
-    { "led_rot_an",  led_rot_an,  "RED - ON",  NULL        },
-    { "led_rot_aus", led_rot_aus, "RED - OFF", NULL        },
-    { "led_grn_an",  led_grn_an,  "GRN - ON",  NULL        },
-    { "led_grn_aus", led_grn_aus, "GRN - OFF", NULL        },
-    { "led_an",      led_an,      "RED - ON",  "GRN - ON"  },
-    { "led_aus",     led_aus,     "RED - OFF", "GRN - OFF" },
-    { "led_switch",  led_switch,  NULL,        NULL        },
-    { NULL,          NULL,        NULL,        NULL        }
+    { "led_rot_an",  led_rot_an,  NULL, "RED - ON",  NULL        },
+    { "led_rot_aus", led_rot_aus, NULL, "RED - OFF", NULL        },
+    { "led_grn_an",  led_grn_an,  NULL, "GRN - ON",  NULL        },
+    { "led_grn_aus", led_grn_aus, NULL, "GRN - OFF", NULL        },
+    { "led_an",      led_an,      NULL, "RED - ON",  "GRN - ON"  },
+    { "led_aus",     led_aus,     NULL, "RED - OFF", "GRN - OFF" },
+    { "led_switch",  led_switch,  NULL, NULL,        NULL        },
+    { NULL,          NULL,        NULL, NULL,        NULL        }
 };
 
 static const command_t led_dynamic_cmds[] = {
-    { "led_blink",   led_blink,   "BLINK - ON",        "press any button to cancel." },
-    { "led_blinksw", led_blinksw, "blinkswitch - ON.", "press any button to cancel"  },
-    { "stop",        stop,        "stop.",             NULL                          },
-    { NULL,          NULL,        NULL,                NULL                          }
+    { "led_blink",   led_blink,   NULL, "BLINK - ON",        "press any button to cancel." },
+    { "led_blinksw", led_blinksw, NULL, "blinkswitch - ON.", "press any button to cancel"  },
+    { "stop",        stop,        NULL, "stop.",             NULL                          },
+    { NULL,          NULL,        NULL, NULL,                NULL                          }
+};
+
+static void setTimer(unsigned int wert);
+
+static const command_t timer_cmds[] = {
+    { "settimer_", NULL, setTimer, NULL, NULL },
+    { NULL,        NULL, NULL,     NULL, NULL }
 };
 
 static const commandGroup_t groups[] = {
     { "General Options",     general_cmds     },
     { "LED Options Static",  led_static_cmds  },
     { "LED Options Dynamic", led_dynamic_cmds },
+    { "Timer Options",       timer_cmds       },
     { NULL,                  NULL             }
 };
 
 ////////////////////////////////////////////////////////////////////////
+
+/* Zahl ueber sends() ausgeben. int ist auf dem MSP430 16 Bit,
+ * unsigned also maximal 65535 -> 5 Ziffern plus Terminator. */
+static void sendNum(unsigned int n){
+
+    char buf[6];
+    int  i = 5;
+
+    buf[i] = '\0';
+
+    do {
+        buf[--i] = (char)('0' + (n % 10u));
+        n /= 10u;
+    } while (n != 0u);
+
+    sends(&buf[i]);
+}
+
+/* Ziffernfolge einlesen. Liefert false bei leerer Eingabe,
+ * Nicht-Ziffern oder Ueberlauf jenseits von 65535. */
+static bool parseUInt(const char *s, unsigned int *out){
+
+    unsigned int wert = 0u;
+
+    if (*s == '\0') return false;
+
+    for ( ; *s != '\0' ; s++){
+
+        if (*s < '0' || *s > '9') return false;
+
+        if (wert > 6553u) return false;
+        wert *= 10u;
+
+        if (wert > (65535u - (unsigned int)(*s - '0'))) return false;
+        wert += (unsigned int)(*s - '0');
+    }
+
+    *out = wert;
+    return true;
+}
 
 static void respond(const char *msg){
     system();
@@ -79,7 +130,29 @@ void commands(char *eingabe){
 
         for (i = 0 ; cmd[i].name != NULL ; i++){
 
-            if (strcmp(eingabe, cmd[i].name) == 0){
+            if (cmd[i].argHandler != NULL){
+
+                /* Befehl mit Argument: Praefix vergleichen, Rest als Zahl lesen. */
+                size_t len = strlen(cmd[i].name);
+
+                if (strncmp(eingabe, cmd[i].name, len) == 0){
+
+                    unsigned int wert;
+
+                    if (parseUInt(&eingabe[len], &wert)){
+                        cmd[i].argHandler(wert);
+                    }
+                    else {
+                        system();
+                        sends("invalid argument for: ");
+                        red();
+                        sends(cmd[i].name);
+                        linebreak(1);
+                    }
+                    return;
+                }
+            }
+            else if (strcmp(eingabe, cmd[i].name) == 0){
 
                 if (cmd[i].handler != NULL) cmd[i].handler();
                 if (cmd[i].msg1    != NULL) respond(cmd[i].msg1);
@@ -122,6 +195,11 @@ static void printGroup(const commandGroup_t *gruppe){
 
         cyan();
         sends(gruppe->entries[i].name);
+
+        if (gruppe->entries[i].argHandler != NULL){
+            sends("<zahl>");
+        }
+
         linebreak(1);
     }
 }
@@ -133,4 +211,16 @@ void listCommands(void){
     for (g = 0 ; groups[g].title != NULL ; g++){
         printGroup(&groups[g]);
     }
+}
+
+////////////////////////////////////////////////////////////////////////
+
+static void setTimer(unsigned int wert){
+
+    system();
+    sends("timer set to: ");
+    cyan();
+    sendNum(wert);
+    standardColour();
+    linebreak(1);
 }
