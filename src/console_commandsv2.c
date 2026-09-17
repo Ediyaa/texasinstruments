@@ -7,11 +7,6 @@
 #include "string.h"
 #include <stdbool.h>
 
-/* Definiert in main.c. Gehoeren eigentlich in einen eigenen Header. */
-extern void led_blink(void);
-extern void led_blinksw(void);
-extern void stop(void);
-
 ////////////////////////////////////////////////////////////////////////
 
 typedef void (*commandFn)(void);
@@ -52,10 +47,13 @@ static const command_t led_static_cmds[] = {
     { NULL,          NULL,        NULL, NULL, NULL,        NULL        }
 };
 
+static void led_blinktoggle(void);
+
 static const command_t led_dynamic_cmds[] = {
     { "led_blink",   led_blink,   NULL, NULL, "BLINK - ON",        "press any button to cancel." },
     { "led_blinksw", led_blinksw, NULL, NULL, "blinkswitch - ON.", "press any button to cancel"  },
     { "stop",        stop,        NULL, NULL, "stop.",             NULL                          },
+    { "led_blinktoggle", led_blinktoggle, NULL, NULL, NULL,        NULL                          },
     { NULL,          NULL,        NULL, NULL, NULL,                NULL                          }
 };
 
@@ -67,7 +65,7 @@ static void statuspwm(void);
 
 static const command_t timer_cmds[] = {
     { "settimer_", NULL, setTimer, "<INTEGER[1,100]>",        NULL, NULL },
-    { "setdimmf_",  NULL, setDimmf,  "<INTEGER[1,4]>", NULL, "1024 2048 4096 8192" },
+    { "setdimmf_",  NULL, setDimmf,  "<INTEGER[1,4]>", NULL, NULL },
     { "setdimm_",   NULL, setDimm,   "<INTEGER[1,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
     { NULL,        NULL, NULL,     NULL,            NULL, NULL }
@@ -327,4 +325,22 @@ static void statuspwm(void){
     sendNum(TA0CCR1);
     standardColour();
     sends("\r\n");
+}
+
+/* Schaltet den dynamischen Blink-Modus um: aus led_func_stat==0
+ * wird geblinkt, sonst gestoppt. Nutzt die main.c-Funktionen,
+ * die led_func_stat bereits kennen. */
+static void led_blinktoggle(void){
+
+    if (led_func_stat == 0){
+        led_blink();
+        system();
+        sends("BLINK - ON");
+    }
+    else {
+        stop();
+        system();
+        sends("BLINK - OFF");
+    }
+    linebreak(1);
 }

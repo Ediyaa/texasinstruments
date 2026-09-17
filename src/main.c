@@ -16,26 +16,6 @@ void watchdogInit(void){
     WDTCTL = WDTPW | WDTHOLD;
 }
 
-//////////////GLOBAL_VARIABLES////////////////
-
-volatile int led_func_stat = 0;
-
-
-void led_blink(void){
-    led_aus();
-    led_func_stat = 1;
-}
-void led_blinksw(void){
-    led_aus();
-    led_func_stat = 2;
-}
-void stop(void){
-    led_aus();
-    led_func_stat = 0;
-}
-
-
-
 int main(void)
 {
     watchdogInit();

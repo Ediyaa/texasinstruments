@@ -59,3 +59,21 @@ void led_switch(void){
         led_grn_an();
     }
 }
+
+//////////////////DYNAMISCHER BLINK-MODUS/////////////////////////
+/* urspruenglich in main.c, gehoert aber hierher: reine LED-Logik */
+
+volatile int led_func_stat = 0;
+
+void led_blink(void){
+    led_aus();
+    led_func_stat = 1;
+}
+void led_blinksw(void){
+    led_aus();
+    led_func_stat = 2;
+}
+void stop(void){
+    led_aus();
+    led_func_stat = 0;
+}

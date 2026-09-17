@@ -24,4 +24,11 @@ void led_aus(void);
 
 void led_switch(void);
 
+/* Dynamischer Blink-Modus, urspruenglich in main.c */
+extern volatile int led_func_stat;
+
+void led_blink(void);
+void led_blinksw(void);
+void stop(void);
+
 #endif /* INLCUDE_LED_H_ */
