@@ -24,18 +24,26 @@ void timerInitA0(void){
 void timerSetDimmf(unsigned int wert){
 
     if (wert == 1){
-        TA0CCR0 = 1024;
-        TA0CCR1 = 512;
-    }
-    else if (wert == 2){
-        TA0CCR0 = 512;
-        TA0CCR1 = 256;
-    }
-    else if (wert == 3){
         TA0CCR0 = 256;
         TA0CCR1 = 128;
     }
+    if (wert == 2){
+        TA0CCR0 = 512;
+        TA0CCR1 = 256;
+    }
+    if (wert == 3){
+        TA0CCR0 = 1024;
+        TA0CCR1 = 512;
+    }
     else if (wert == 4){
+        TA0CCR0 = 512;
+        TA0CCR1 = 256;
+    }
+    else if (wert == 5){
+        TA0CCR0 = 256;
+        TA0CCR1 = 128;
+    }
+    else if (wert == 6){
         TA0CCR0 = 128;
         TA0CCR1 = 64;
     }
@@ -79,5 +87,6 @@ __interrupt void ta0_ccr1_isr(void){
         led_aus();
     } 
     TA0CCTL1 &= ~CCIFG;
+    
 
 }

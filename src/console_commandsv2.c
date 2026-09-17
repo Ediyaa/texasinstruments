@@ -243,9 +243,9 @@ static void setTimer(unsigned int wert){
 
 static void setDimmf(unsigned int wert){
 
-    static const char *const freq[] = { "1024Hz", "2048Hz", "4096Hz", "8192Hz" };
+    static const char *const freq[] = { "256Hz","512Hz", "1024Hz", "2048Hz", "4096Hz", "8192Hz" };
 
-    if (wert < 1 || wert > 4){
+    if (wert < 1 || wert > 6){
         system();
         sends("invalid argument for: ");
         red();
