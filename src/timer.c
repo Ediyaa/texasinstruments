@@ -2,9 +2,10 @@
 #include "include/timer.h"
 #include "include/led.h"
 #include <src/include/console.h>
+#include "include/console_commandlinetools.h"
 
 ///////////////////REGISTER//////////////////////////
-extern volatile int pwmtoggleflag = 0;
+volatile int pwmtoggleflag = 0;
 
 void timerInitA0(void){
 
@@ -68,11 +69,36 @@ void timersetDimm (unsigned int wert){
 void pwmtoggle(void){
     if (pwmtoggleflag == 0){
         pwmtoggleflag = 1;
+        system();
+        sends("PWM - ON");
     }
     else{
         pwmtoggleflag = 0;
+        system();
+        sends("PWM - OFF");
     }
+    linebreak(1);
+}
 
+void pwmstatus(void){
+    blue();
+    sends("PWM:\r\n");
+    if (pwmtoggleflag == 1){
+        sends("PWM is enabled\r\n");
+    }
+    else {
+        sends("PWM is disabled\r\n");
+    }
+    sends("Frequency: ");
+    cyan();
+    sendNum(TA0CCR0);
+    standardColour();
+    sends("\r\n");
+    sends("Duty: ");
+    cyan();
+    sendNum(TA0CCR1);
+    standardColour();
+    sends("\r\n");
 }
 
 //A0_0

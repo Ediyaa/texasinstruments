@@ -64,9 +64,9 @@ static void statuspwm(void);
 static const command_t timer_cmds[] = {
     { "settimer_", NULL, setTimer, "<INTEGER[1,100]>",        NULL, NULL },
     { "setdimmf_",  NULL, setDimmf,  "<INTEGER[1,4]>", NULL, NULL },
-    { "setdimm_",   NULL, setDimm,   "<INTEGER[1,100]>", NULL, NULL },
+    { "setdimm_",   NULL, setDimm,   "<INTEGER[0,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
-    { "pwmtoggle",  pwmtoggle,      NULL, NULL, "PWM toggled.", NULL },
+    { "pwmtoggle",  pwmtoggle,      NULL, NULL, NULL,           NULL },
     { NULL,        NULL, NULL,     NULL,            NULL, NULL }
 };
 
@@ -81,8 +81,9 @@ static const commandGroup_t groups[] = {
 ////////////////////////////////////////////////////////////////////////
 
 /* Zahl ueber sends() ausgeben. int ist auf dem MSP430 16 Bit,
- * unsigned also maximal 65535 -> 5 Ziffern plus Terminator. */
-static void sendNum(unsigned int n){
+ * unsigned also maximal 65535 -> 5 Ziffern plus Terminator.
+ * Nicht mehr static: console_commandlinetools.c (pwmstatus) braucht sie auch. */
+void sendNum(unsigned int n){
 
     char buf[6];
     int  i = 5;
@@ -266,7 +267,7 @@ static void setDimmf(unsigned int wert){
 
 static void setDimm(unsigned int wert){
 
-    if (wert < 1 || wert > 100){
+    if (wert < 0 || wert > 100){
         system();
         sends("invalid argument for: ");
         red();

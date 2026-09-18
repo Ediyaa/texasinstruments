@@ -8,6 +8,9 @@ void timerInitA0(void);
 void timerSetDimmf(unsigned int wert);
 void timersetDimm(unsigned int wert);
 
+
+
 void pwmtoggle(void);
+void pwmstatus(void);
 
 #endif /* SRC_INCLUDE_TIMER_H_ */

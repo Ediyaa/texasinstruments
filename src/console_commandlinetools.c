@@ -1,3 +1,4 @@
+#include <msp430.h>
 #include "include/console.h"
 #include "include/console_commandlinetools.h"
 #include "include/timer.h"
@@ -55,26 +56,6 @@ void status(void){
     sends("Format:  UTF-8\r\n");
 }
 
-void pwmstatus(void){
-    blue();
-    sends("PWM:\r\n");
-    if (pwmtoggleflag == 1){
-        sends("PWM is enabled\r\n");
-    }
-    else {
-        sends("PWM is disabled\r\n");
-    }
-    sends("Frequency: ");
-    cyan();
-    sendNum(TA0CCR0);
-    standardColour();
-    sends("\r\n");
-    sends("Duty: ");
-    cyan();
-    sendNum(TA0CCR1);
-    standardColour();
-    sends("\r\n");
-}
 
 void standardColour(void){
     sends("\033[0m");
