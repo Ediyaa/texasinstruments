@@ -1,6 +1,8 @@
 #ifndef SRC_INCLUDE_TIMER_H_
 #define SRC_INCLUDE_TIMER_H_
 
+extern volatile int pwmtoggleflag;
+
 void timerInitA0(void);
 
 void timerSetDimmf(unsigned int wert);

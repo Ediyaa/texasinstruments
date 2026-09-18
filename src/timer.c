@@ -4,7 +4,7 @@
 #include <src/include/console.h>
 
 ///////////////////REGISTER//////////////////////////
-volatile int pwmtoggleflag = 0;
+extern volatile int pwmtoggleflag = 0;
 
 void timerInitA0(void){
 
@@ -66,11 +66,11 @@ void timersetDimm (unsigned int wert){
     TA0CCR1 = (unsigned int)(((unsigned long)TA0CCR0 * wert + 50uL) / 100uL);
 }
 void pwmtoggle(void){
-    if (toggle == 0){
-        toggle = 1;
+    if (pwmtoggleflag == 0){
+        pwmtoggleflag = 1;
     }
     else{
-        toggle = 0;
+        pwmtoggleflag = 0;
     }
 
 }
@@ -79,7 +79,7 @@ void pwmtoggle(void){
 #pragma vector = TIMER0_A0_VECTOR
 __interrupt void ta0_ccr0_isr(void){
 
-    if (toggle == 1){
+    if (pwmtoggleflag == 1){
         led_an();
     }
 
@@ -88,7 +88,7 @@ __interrupt void ta0_ccr0_isr(void){
 #pragma vector = TIMER0_A1_VECTOR
 __interrupt void ta0_ccr1_isr(void){
 
-    if (toggle == 1){
+    if (pwmtoggleflag == 1){
         led_aus();
     } 
     TA0CCTL1 &= ~CCIFG;
