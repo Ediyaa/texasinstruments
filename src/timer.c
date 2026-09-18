@@ -4,7 +4,7 @@
 #include <src/include/console.h>
 
 ///////////////////REGISTER//////////////////////////
-volatile int toggle = 0;
+volatile int pwmtoggleflag = 0;
 
 void timerInitA0(void){
 
@@ -52,12 +52,17 @@ void timerSetDimmf(unsigned int wert){
 
 void timersetDimm (unsigned int wert){
 
-    if (wert < 1 || wert > 100){
+    if (wert < 0 || wert > 100){
         return;
     }
 
     /* 32 Bit rechnen: TA0CCR0 * wert sprengt sonst die 16 Bit
      * (z.B. 1024 * 100 = 102400 > 65535). +50 rundet kaufmaennisch. */
+    if (wert == 0){
+        TA0CCR1 = 1;
+        return;
+    }
+    else
     TA0CCR1 = (unsigned int)(((unsigned long)TA0CCR0 * wert + 50uL) / 100uL);
 }
 void pwmtoggle(void){

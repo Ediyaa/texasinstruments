@@ -285,16 +285,5 @@ static void setDimm(unsigned int wert){
     linebreak(1);
 }
 static void statuspwm(void){
-    blue();
-    sends("PWM:\r\n");
-    sends("Freq:  ");
-    cyan();
-    sendNum(TA0CCR0);
-    standardColour();
-    sends("\r\n");
-    sends("Duty:  ");
-    cyan();
-    sendNum(TA0CCR1);
-    standardColour();
-    sends("\r\n");
+    pwmstatus();
 }
