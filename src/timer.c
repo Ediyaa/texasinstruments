@@ -82,20 +82,18 @@ void pwmtoggle(void){
 
 void pwmstatus(void){
     blue();
-    sends("PWM:\r\n");
+    sends("PWM: ");
     if (pwmtoggleflag == 1){
         sends("PWM is enabled\r\n");
     }
     else {
         sends("PWM is disabled\r\n");
     }
-    sends("Frequency: ");
-    cyan();
+    sends("Frequency:   ");
     sendNum(TA0CCR0);
     standardColour();
     sends("\r\n");
-    sends("Duty: ");
-    cyan();
+    sends("Duty:    ");
     sendNum(TA0CCR1);
     standardColour();
     sends("\r\n");
