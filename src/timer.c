@@ -24,14 +24,15 @@ void timerInitA0(void){
 
 void timerInitA2(void){
 
-    P2DIR |= BIT5;                    // P2.5 als Ausgang
-    P2SEL |= BIT5;                    // Pin auf Timerfunktion TA2.2 schalten
+    P2DIR |= BIT5;                    
+    P2SEL |= BIT5;                   
 
-    TA2CCR0  = 1023;                  // Periode: 1024 Takte (Zählung 0 bis TA2CCR0)
-    TA2CCR2  = 512;                   // Schaltpunkt: Tastgrad 50 %
+    P2DS |= BIT5;
 
-    TA2CCTL2 = OUTMOD_7;              // Reset/Set: Out2 high bei TA2R = 0,
-                                      //            low bei TA2R = TA2CCR2
+    TA2CCR0  = 1023;                  
+    TA2CCR2  = 512;                   
+    TA2CCTL2 = OUTMOD_7;              
+                                    
 
     TA2CTL = TASSEL__SMCLK | ID__1 | MC__UP | TACLR;   // SMCLK, kein Teiler, Up-Modus
 }
@@ -39,29 +40,56 @@ void timerInitA2(void){
 void timerSetDimmf(unsigned int wert){
 
     if (wert == 1){
-        TA0CCR0 = 256;
-        TA0CCR1 = 128;
-    }
-    if (wert == 2){
-        TA0CCR0 = 512;
-        TA0CCR1 = 256;
-    }
-    if (wert == 3){
-        TA0CCR0 = 1024;
-        TA0CCR1 = 512;
-    }
-    else if (wert == 4){
-        TA0CCR0 = 512;
-        TA0CCR1 = 256;
-    }
-    else if (wert == 5){
-        TA0CCR0 = 256;
-        TA0CCR1 = 128;
-    }
-    else if (wert == 6){
         TA0CCR0 = 128;
         TA0CCR1 = 64;
+
+        TA2CCR0  = 128;                  
+        TA2CCR2  = 64; 
     }
+
+    else if (wert == 2){
+        TA0CCR0 = 256;
+        TA0CCR1 = 128;
+
+        TA2CCR0  = 256;                  
+        TA2CCR2  = 128; 
+    }
+    else if (wert == 3){
+        TA0CCR0 = 512;
+        TA0CCR1 = 256;
+
+        TA2CCR0  = 512;                  
+        TA2CCR2  = 256; 
+    }
+    else if (wert == 4){
+        TA0CCR0 = 1024;
+        TA0CCR1 = 512;
+
+        TA2CCR0  = 1023;                  
+        TA2CCR2  = 512; 
+    }
+    else if (wert == 5){
+        TA0CCR0 = 2048;
+        TA0CCR1 = 1024;
+
+        TA2CCR0  = 2048;                  
+        TA2CCR2  = 1024; 
+    }
+    else if (wert == 6){
+        TA0CCR0 = 4096;
+        TA0CCR1 = 2048;
+
+        TA2CCR0  = 4096;                  
+        TA2CCR2  = 2048; 
+    }
+       else if (wert == 7){
+        TA0CCR0 = 8192;
+        TA0CCR1 = 4096;
+
+        TA2CCR0  = 8192;                  
+        TA2CCR2  = 4096; 
+    }
+   
     else return;
 }
 
@@ -75,10 +103,12 @@ void timersetDimm (unsigned int wert){
      * (z.B. 1024 * 100 = 102400 > 65535). +50 rundet kaufmaennisch. */
     if (wert == 0){
         TA0CCR1 = 1;
+        TA2CCR2  = 1;
         return;
     }
     else
     TA0CCR1 = (unsigned int)(((unsigned long)TA0CCR0 * wert + 50uL) / 100uL);
+    TA2CCR2  = (unsigned int)(((unsigned long)TA2CCR0 * wert + 50uL) / 100uL);
 }
 void pwmtoggle(void){
     if (pwmtoggleflag == 0){
