@@ -101,7 +101,7 @@ void timerSetDimmf(unsigned int wert){
 
 void timersetDimm (unsigned int wert){
 
-    if (wert < 0 || wert > 100){
+    if (wert < 0 || wert > 10000){
         return;
     }
 
@@ -113,8 +113,8 @@ void timersetDimm (unsigned int wert){
         return;
     }
     else
-    TA0CCR1 = (unsigned int)(((unsigned long)TA0CCR0 * wert + 50uL) / 100uL);
-    TA2CCR2  = (unsigned int)(((unsigned long)TA2CCR0 * wert + 50uL) / 100uL);
+    TA0CCR1 = (unsigned int)(((unsigned long)TA0CCR0 * wert + 50uL) / 10000uL);
+    TA2CCR2  = (unsigned int)(((unsigned long)TA2CCR0 * wert + 50uL) / 10000uL);
 }
 void pwmtoggle(void){
     if (pwmtoggleflag == 0){
