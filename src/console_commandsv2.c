@@ -28,6 +28,14 @@ typedef struct {
 } commandGroup_t;
 
 ////////////////////////////////////////////////////////////////////////
+static void setTimer(unsigned int wert);
+static void setDimmf(unsigned int wert);
+static void setDimm(unsigned int wert);
+static void statuspwm(void);
+
+static void setClock(unsigned int wert);
+static void statusclock(void);
+
 
 static const command_t general_cmds[] = {
     { "help",  listCommands, NULL, NULL, NULL,             NULL },
@@ -55,11 +63,6 @@ static const command_t led_dynamic_cmds[] = {
     { NULL,          NULL,        NULL, NULL, NULL,                NULL                          }
 };
 
-static void setTimer(unsigned int wert);
-static void setDimmf(unsigned int wert);
-static void setDimm(unsigned int wert);
-static void statuspwm(void);
-
 
 static const command_t timer_cmds[] = {
     { "settimer_", NULL, setTimer, "<INTEGER[1,100]>",        NULL, NULL },
@@ -67,6 +70,12 @@ static const command_t timer_cmds[] = {
     { "setdimm_",   NULL, setDimm,   "<INTEGER[0,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
     { "pwmtoggle",  pwmtoggle,      NULL, NULL, NULL,           NULL },
+    { NULL,        NULL, NULL,     NULL,            NULL, NULL }
+};
+
+static const command_t clock_cmds[] = {
+    { "setclock_", NULL, setClock, "<INTEGER[1,3]>",        NULL, NULL },
+    { "statusclock",  statusclock, NULL,    NULL, NULL, NULL },
     { NULL,        NULL, NULL,     NULL,            NULL, NULL }
 };
 
@@ -83,6 +92,56 @@ static const commandGroup_t groups[] = {
 /* Zahl ueber sends() ausgeben. int ist auf dem MSP430 16 Bit,
  * unsigned also maximal 65535 -> 5 Ziffern plus Terminator.
  * Nicht mehr static: console_commandlinetools.c (pwmstatus) braucht sie auch. */
+
+static void statusclock(void){
+    
+    if (UCSCTL4 == (SELA__REFOCLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV)){
+        system();
+        sends("Clock:   REFO (internal), 4 194 304 Hz, ±3,5%");
+        linebreak(1);
+    }
+    else if (UCSCTL4 == (SELA__XT1CLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV)){
+        system();
+        sends("Clock:   XT1 (quartz), 4 194 304 Hz, ±0,002%");
+        linebreak(1);
+    }
+    else if (UCSCTL4 == (SELA__REFOCLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV)){
+        system();
+        sends("Clock:   XT2 (ceramic), 4 250 000 Hz, ±0,25%");
+        linebreak(1);
+    }
+    else{
+        system();
+        sends("Clock:   unknown");
+        linebreak(1);
+    }
+ 
+ static void setClock(unsigned int wert){
+    if (wert == 1){
+        clock_init_refo();
+        system();
+        sends("Clock set to: REFO (internal), 4 194 304 Hz, ±3,5%");
+        linebreak(1);
+    }
+    else if (wert == 2){
+        clock_init_xt1();
+        system();
+        sends("Clock set to: XT1 (quartz), 4 194 304 Hz, ±0,002%");
+        linebreak(1);
+    }
+    else if (wert == 3){
+        clock_init_xt2();
+        system();
+        sends("Clock set to: XT2 (ceramic), 4 250 000 Hz, ±0,25%, ");
+        linebreak(1);
+    }
+    else{
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("setclock_");
+        linebreak(1);
+    }
 void sendNum(unsigned int n){
 
     char buf[6];
