@@ -66,7 +66,7 @@ static const command_t led_dynamic_cmds[] = {
 
 static const command_t timer_cmds[] = {
     { "settimer_", NULL, setTimer, "<INTEGER[1,100]>",        NULL, NULL },
-    { "setdimmf_",  NULL, setDimmf,  "<INTEGER[1,4]>", NULL, NULL },
+    { "setdimmf_",  NULL, setDimmf,  "<INTEGER[0,7]>", NULL, NULL },
     { "setdimm_",   NULL, setDimm,   "<INTEGER[0,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
     { "pwmtoggle",  pwmtoggle,      NULL, NULL, NULL,           NULL },
@@ -305,7 +305,7 @@ static void setDimmf(unsigned int wert){
 
     static const char *const freq[] = { "128Hz","256Hz","512Hz", "1024Hz", "2048Hz", "4096Hz", "8192Hz" };
 
-    if (wert < 1 || wert > 7){
+    if (wert < 0 || wert > 7){
         system();
         sends("invalid argument for: ");
         red();
@@ -319,7 +319,7 @@ static void setDimmf(unsigned int wert){
     system();
     sends("dimm frequency set to: ");
     cyan();
-    sends(freq[wert - 1]);
+    sends(freq[wert]);
     standardColour();
     linebreak(1);
 }
