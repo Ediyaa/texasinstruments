@@ -329,7 +329,7 @@ static void setDimmf(unsigned int wert){
 
 static void setDimm(unsigned int wert){
 
-    if (wert < 0 || wert > 100){
+    if (wert < 0 || wert > 10000){
         system();
         sends("invalid argument for: ");
         red();
