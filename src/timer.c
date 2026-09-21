@@ -106,15 +106,16 @@ void timersetDimm (unsigned int wert){
     }
 
     /* 32 Bit rechnen: TA0CCR0 * wert sprengt sonst die 16 Bit
-     * (z.B. 1024 * 100 = 102400 > 65535). +50 rundet kaufmaennisch. */
+     * (65535 * 10000 = 655350000). +5000 = halber Divisor,
+     * rundet kaufmaennisch. */
     if (wert == 0){
         TA0CCR1 = 1;
         TA2CCR2  = 1;
         return;
     }
     else
-    TA0CCR1 = (unsigned int)(((unsigned long)TA0CCR0 * wert + 50uL) / 10000uL);
-    TA2CCR2  = (unsigned int)(((unsigned long)TA2CCR0 * wert + 50uL) / 10000uL);
+    TA0CCR1 = (unsigned int)(((unsigned long)TA0CCR0 * wert + 5000uL) / 10000uL);
+    TA2CCR2  = (unsigned int)(((unsigned long)TA2CCR0 * wert + 5000uL) / 10000uL);
 }
 void pwmtoggle(void){
     if (pwmtoggleflag == 0){
