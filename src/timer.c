@@ -39,7 +39,7 @@ void timerInitA2(void){
 
 void timerSetDimmf(unsigned int wert){
 
-    if (wert == 1){
+    if (wert == 7){
         TA0CCR0 = 128;
         TA0CCR1 = 64;
 
@@ -47,14 +47,14 @@ void timerSetDimmf(unsigned int wert){
         TA2CCR2  = 64; 
     }
 
-    else if (wert == 2){
+    else if (wert == 6){
         TA0CCR0 = 256;
         TA0CCR1 = 128;
 
         TA2CCR0  = 256;                  
         TA2CCR2  = 128; 
     }
-    else if (wert == 3){
+    else if (wert == 5){
         TA0CCR0 = 512;
         TA0CCR1 = 256;
 
@@ -68,21 +68,21 @@ void timerSetDimmf(unsigned int wert){
         TA2CCR0  = 1023;                  
         TA2CCR2  = 512; 
     }
-    else if (wert == 5){
+    else if (wert == 3){
         TA0CCR0 = 2048;
         TA0CCR1 = 1024;
 
         TA2CCR0  = 2048;                  
         TA2CCR2  = 1024; 
     }
-    else if (wert == 6){
+    else if (wert == 2){
         TA0CCR0 = 4096;
         TA0CCR1 = 2048;
 
         TA2CCR0  = 4096;                  
         TA2CCR2  = 2048; 
     }
-       else if (wert == 7){
+       else if (wert == 1){
         TA0CCR0 = 8192;
         TA0CCR1 = 4096;
 
