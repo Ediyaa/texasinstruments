@@ -61,5 +61,5 @@ void clock_init_xt2(void)
     __delay_cycles(CLOCK_SETTLE_XT2);
     clock_wait_dco();
 
-    UCSCTL4 = SELA__REFOCLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV;
+    UCSCTL4 = SELA__XT2CLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV;
 }

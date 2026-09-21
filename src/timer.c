@@ -90,12 +90,12 @@ void timerSetDimmf(unsigned int wert){
         TA2CCR2  = 4096; 
     }
         else if (wert == 0){
-        TA0CCR0 = 65536;
-        TA0CCR1 = 32786;
+        TA0CCR0 = 65535;
+        TA0CCR1 = 32768;
 
-        TA2CCR0  = 65536;                  
-        TA2CCR2  = 32768; 
-   
+        TA2CCR0  = 65535;
+        TA2CCR2  = 32768;
+    }
     else return;
 }
 

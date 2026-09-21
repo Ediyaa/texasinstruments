@@ -5,6 +5,7 @@
 #include "include/console_commands.h"
 #include "include/led.h"
 #include "include/timer.h"
+#include "include/clk.h"
 #include "string.h"
 #include <stdbool.h>
 
@@ -84,6 +85,7 @@ static const commandGroup_t groups[] = {
     { "LED Options Static",  led_static_cmds  },
     { "LED Options Dynamic", led_dynamic_cmds },
     { "Timer Options",       timer_cmds       },
+    { "Clock Options",       clock_cmds       },
     { NULL,                  NULL             }
 };
 
@@ -105,7 +107,7 @@ static void statusclock(void){
         sends("Clock:   XT1 (quartz), 4 194 304 Hz, ±0,002%");
         linebreak(1);
     }
-    else if (UCSCTL4 == (SELA__REFOCLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV)){
+    else if (UCSCTL4 == (SELA__XT2CLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV)){
         system();
         sends("Clock:   XT2 (ceramic), 4 250 000 Hz, ±0,25%");
         linebreak(1);
@@ -115,8 +117,9 @@ static void statusclock(void){
         sends("Clock:   unknown");
         linebreak(1);
     }
- 
- static void setClock(unsigned int wert){
+}
+
+static void setClock(unsigned int wert){
     if (wert == 1){
         clock_init_refo();
         system();
@@ -142,6 +145,8 @@ static void statusclock(void){
         sends("setclock_");
         linebreak(1);
     }
+}
+
 void sendNum(unsigned int n){
 
     char buf[6];

@@ -33,42 +33,6 @@ int main(void)
 
         console_task();
 
-        while(led_func_stat >= 1){
-            while(led_func_stat == 1){
-                    if (checkEmpfang()){
-                    led_an();
-                       __delay_cycles(100000);
-                       led_aus();
-                       __delay_cycles(100000);
-                    }
-                    else{
-                        stop();
-                        system();
-                        sends("stop.");
-                        linebreak(1);
-                        break;
-                    }
 
-                   }
-                   while(led_func_stat == 2){
-                       if (checkEmpfang()){
-                       led_rot_an();
-                       led_grn_aus();
-                       __delay_cycles(100000);
-                       led_rot_aus();
-                       led_grn_an();
-                       __delay_cycles(100000);
-                       }
-                       else{
-                           stop();
-                           system();
-                           sends("stop.");
-                           linebreak(1);
-                           break;
-
-                       }
-                   }
-            break;
-        }
     }
 }
