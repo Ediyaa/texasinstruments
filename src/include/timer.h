@@ -4,7 +4,7 @@
 extern volatile int pwmtoggleflag;
 
 void timerInitA0(void);
-
+void timerInitA2(void);
 void timerSetDimmf(unsigned int wert);
 void timersetDimm(unsigned int wert);
 

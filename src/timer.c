@@ -22,6 +22,20 @@ void timerInitA0(void){
     __enable_interrupt();
 }
 
+void timerInitA2(void){
+
+    P2DIR |= BIT5;                    // P2.5 als Ausgang
+    P2SEL |= BIT5;                    // Pin auf Timerfunktion TA2.2 schalten
+
+    TA2CCR0  = 1023;                  // Periode: 1024 Takte (Zählung 0 bis TA2CCR0)
+    TA2CCR2  = 512;                   // Schaltpunkt: Tastgrad 50 %
+
+    TA2CCTL2 = OUTMOD_7;              // Reset/Set: Out2 high bei TA2R = 0,
+                                      //            low bei TA2R = TA2CCR2
+
+    TA2CTL = TASSEL__SMCLK | ID__1 | MC__UP | TACLR;   // SMCLK, kein Teiler, Up-Modus
+}
+
 void timerSetDimmf(unsigned int wert){
 
     if (wert == 1){

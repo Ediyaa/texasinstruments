@@ -15,7 +15,15 @@ void ledInit(void){
 
 
     P1DIR |= BIT0;      //LED Rot   - Port 1.0 als Ausgang
-    P4DIR |= BIT7;      //LED Grün  - Port 4.7 als Ausgang
+    P4DIR |= BIT7;      //LED Grï¿½n  - Port 4.7 als Ausgang
+}
+
+void ledInitExtern(void){
+
+    P2DIR |= BIT5;      //LED Rot   - Port 1.0 als Ausgang
+    
+
+ 
 }
 ////////////////////////////////////////////////////////////////
 void led_rot_an(void){

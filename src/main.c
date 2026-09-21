@@ -24,6 +24,7 @@ int main(void)
     consoleUartInit();
     ledInit();
     timerInitA0();
+    timerInitA2();
 //    while(1){
 //        led_switch();
 //    }
