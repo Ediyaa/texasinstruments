@@ -25,8 +25,10 @@
 /* DCOCLK ≈ 8,4 MHz liegt in Bereich 4: f(4,0)max = 3,2 MHz ≤ f ≤ f(4,31)min = 12,3 MHz */
 #define CLOCK_DCORSEL           DCORSEL_4
 
-/* Interne Lastkapazität für XT1 – an den Quarz anpassen, per ACLK-Messung prüfen */
-#define CLOCK_XT1_XCAP          XCAP_3
+/* Lastkapazität XT1: das LaunchPad hat externe 22 pF (C25/C26, SLAU533D S.54).
+ * Deshalb XCAP_0 (1 pF integriert) -> CL,eff ca. 12 pF. XCAP_3 wuerde 12 pF
+ * zusaetzlich zuschalten und die Oszillationsreserve zerstoeren. */
+#define CLOCK_XT1_XCAP          XCAP_0
 
 void clock_init_xt1(void);   /* DCO + FLL an XT1  (Quarz):  2^22 Hz, ppm-genau   */
 void clock_init_refo(void);  /* DCO + FLL an REFO (intern): 2^22 Hz, ±3,5 %      */
