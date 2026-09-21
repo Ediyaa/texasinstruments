@@ -7,10 +7,10 @@ void uartInit(void){
    P4SEL |= BIT4  | BIT5;
 
    UCA1CTL1 |= UCSWRST;     //SoftwareReset aktivieren
-   UCA1CTL1 |= UCSSEL_2;    //Taktquelle SMCLK setzen
+   UCA1CTL1 |= UCSSEL_1;    //Taktquelle ACLK setzen (XT1, 32768 Hz, quarzgenau)
 
-   UCA1BRW = 9;             //Baud 115200
-   UCA1MCTL = UCBRS_1;      //Timingfehler korrektur
+   UCA1BRW = 3;             //Baud 9600: 32768 / 9600 = 3,41
+   UCA1MCTL = UCBRS_3;      //Timingfehler korrektur
 
    UCA1CTL1 &= ~UCSWRST;    //SoftwareReset deaktivieren
 

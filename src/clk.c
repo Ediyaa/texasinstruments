@@ -1,6 +1,19 @@
 #include <msp430.h>
 #include "include/clk.h"
 
+/* XT1 (32-kHz-Quarz) starten. Wird von allen Varianten aufgerufen:
+ * ACLK haengt fest an XT1, damit die UART von der SMCLK-Umschaltung
+ * unberuehrt bleibt. */
+static void clock_start_xt1(void)
+{
+    P5SEL |= BIT4 | BIT5;                                   /* XIN / XOUT */
+    UCSCTL6 = (UCSCTL6 & ~(XT1OFF | XCAP_3)) | CLOCK_XT1_XCAP;
+
+    while (UCSCTL7 & XT1LFOFFG) {                           /* warten bis XT1 schwingt */
+        UCSCTL7 &= ~XT1LFOFFG;
+    }
+}
+
 /* FLL gestoppt neu einstellen, wieder freigeben, Einschwingen abwarten */
 static void clock_fll_setup(uint16_t selref_div, uint16_t flln)
 {
@@ -23,12 +36,7 @@ static void clock_wait_dco(void)
 /* ---------- Variante 1: FLL an XT1 (32-kHz-Quarz) ---------- */
 void clock_init_xt1(void)
 {
-    P5SEL |= BIT4 | BIT5;                                   /* XIN / XOUT */
-    UCSCTL6 = (UCSCTL6 & ~(XT1OFF | XCAP_3)) | CLOCK_XT1_XCAP;
-
-    while (UCSCTL7 & XT1LFOFFG) {                           /* warten bis XT1 schwingt */
-        UCSCTL7 &= ~XT1LFOFFG;
-    }
+    clock_start_xt1();
 
     clock_fll_setup(SELREF__XT1CLK | FLLREFDIV__1, CLOCK_FLLN_32K);
     __delay_cycles(CLOCK_SETTLE_32K);
@@ -40,18 +48,22 @@ void clock_init_xt1(void)
 /* ---------- Variante 2: FLL an REFO (intern) ---------- */
 void clock_init_refo(void)
 {
+    clock_start_xt1();                      /* nur fuer ACLK / UART */
+
     clock_fll_setup(SELREF__REFOCLK | FLLREFDIV__1, CLOCK_FLLN_32K);
     __delay_cycles(CLOCK_SETTLE_32K);
     clock_wait_dco();
 
-    UCSCTL4 = SELA__REFOCLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV;
+    UCSCTL4 = SELA__XT1CLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV;
 }
 
 /* ---------- Variante 3: FLL an XT2 (4-MHz-Keramikresonator) ---------- */
 void clock_init_xt2(void)
 {
+    clock_start_xt1();                      /* nur fuer ACLK / UART */
+
     P5SEL |= BIT2 | BIT3;                                   /* XT2IN / XT2OUT */
-    UCSCTL6 &= ~(XT2OFF | XT2DRIVE_3);                      /* XT2DRIVE_0: 4–8 MHz */
+    UCSCTL6 &= ~(XT2OFF | XT2DRIVE_3);                      /* XT2DRIVE_0: 4-8 MHz */
 
     while (UCSCTL7 & XT2OFFG) {                             /* warten bis XT2 schwingt */
         UCSCTL7 &= ~XT2OFFG;
@@ -61,5 +73,5 @@ void clock_init_xt2(void)
     __delay_cycles(CLOCK_SETTLE_XT2);
     clock_wait_dco();
 
-    UCSCTL4 = SELA__XT2CLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV;
+    UCSCTL4 = SELA__XT1CLK | SELS__DCOCLKDIV | SELM__DCOCLKDIV;
 }

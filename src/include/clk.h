@@ -6,6 +6,8 @@
 /*
  * Taktkonfiguration MSP430F5529 LaunchPad
  * MCLK = SMCLK = DCOCLKDIV, DCO über FLL geregelt.
+ * ACLK haengt in allen Varianten fest an XT1 (32768 Hz, Quarz) und
+ * versorgt die UART - deshalb bleibt die Konsole beim Umschalten stehen.
  *
  *   f_DCOCLKDIV = (FLLN + 1) * f_ref / FLLREFDIV
  *   f_DCOCLK    = 2 * f_DCOCLKDIV        (FLLD = /2)
