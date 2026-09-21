@@ -119,32 +119,26 @@ static void statusclock(void){
     }
 }
 
-static void setClock(unsigned int wert){
-    if (wert == 1){
-        clock_init_refo();
-        system();
-        sends("Clock set to: REFO (internal), 4 194 304 Hz, ±3,5%");
-        linebreak(1);
+static void statusclock(void){
+    unsigned int selref = UCSCTL3 & 0x0070;      /* SELREF, Bit 6-4 */
+
+    system();
+    if (UCSCTL7 & (XT1LFOFFG | DCOFFG)) {        /* Quelle ausgefallen -> Fail-safe */
+        sends("Clock:   fail-safe (REFO), ungeregelt");
     }
-    else if (wert == 2){
-        clock_init_xt1();
-        system();
-        sends("Clock set to: XT1 (quartz), 4 194 304 Hz, ±0,002%");
-        linebreak(1);
+    else if (selref == SELREF__XT1CLK) {
+        sends("Clock:   XT1 (quartz), 4 194 304 Hz, +/-0,002%");
     }
-    else if (wert == 3){
-        clock_init_xt2();
-        system();
-        sends("Clock set to: XT2 (ceramic), 4 250 000 Hz, ±0,25%, ");
-        linebreak(1);
+    else if (selref == SELREF__REFOCLK) {
+        sends("Clock:   REFO (internal), 4 194 304 Hz, +/-3,5%");
     }
-    else{
-        system();
-        sends("invalid argument for: ");
-        red();
-        sends("setclock_");
-        linebreak(1);
+    else if (selref == SELREF__XT2CLK) {
+        sends("Clock:   XT2 (ceramic), 4 250 000 Hz, +/-0,25%");
     }
+    else {
+        sends("Clock:   unknown");
+    }
+    linebreak(1);
 }
 
 void sendNum(unsigned int n){
