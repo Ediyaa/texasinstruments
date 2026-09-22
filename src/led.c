@@ -116,14 +116,14 @@ while (1){
     }
     else{
         wert--;
-        if (wert <= 0){
+        if (wert == 0){
             richtung = 1;
         }
     }
     if (wert == 0){
         return;
     }
-    timersetDimm(perceived_to_duty(wert, TA2CCR2));
+    timersetDimm(perceived_to_duty(wert, 10000u));
 }
 
     
