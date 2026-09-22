@@ -1,6 +1,7 @@
 #include <msp430.h>
 
 #include "include/led.h"
+#include "include/timer.h"
 /*
  * led.c
  *
@@ -69,7 +70,7 @@ void led_switch(void){
 }
 
 //////////////////DYNAMISCHER BLINK-MODUS/////////////////////////
-/* urspruenglich in main.c, gehoert aber hierher: reine LED-Logik */
+
 
 volatile int led_func_stat = 0;
 
@@ -84,4 +85,40 @@ void led_blinksw(void){
 void stop(void){
     led_aus();
     led_func_stat = 0;
+}
+
+
+unsigned int perceived_to_duty(unsigned int wert, unsigned int ccr0)
+{
+    unsigned long v, y;
+
+    if (wert <= 800u) {                 /* L* <= 8: linearer Fuss */
+        return (unsigned int)(((unsigned long)wert * ccr0) / 90330uL);
+    }
+
+    v = ((unsigned long)(wert + 1600u) * 4096uL) / 11600uL;   /* (L*+16)/116 in Q12 */
+    y = (v * v) >> 12;
+    y = (y * v) >> 12;                  /* hoch drei */
+
+    return (unsigned int)((y * ccr0) >> 12);
+}
+
+void ledfade(void){
+    static unsigned int wert = 0;
+    static int richtung = 1;
+
+    if (richtung == 1){
+        wert++;
+        if (wert >= 10000){
+            richtung = -1;
+        }
+    }
+    else{
+        wert--;
+        if (wert <= 0){
+            richtung = 1;
+        }
+    }
+
+    timersetDimm(perceived_to_duty(wert, TA2CCR2));
 }

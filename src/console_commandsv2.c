@@ -32,10 +32,12 @@ typedef struct {
 static void setTimer(unsigned int wert);
 static void setDimmf(unsigned int wert);
 static void setDimm(unsigned int wert);
+static void setDimmlin(unsigned int wert);
 static void statuspwm(void);
 
 static void setClock(unsigned int wert);
 static void statusclock(void);
+static void led_fade(void);
 
 
 static const command_t general_cmds[] = {
@@ -61,6 +63,7 @@ static const command_t led_dynamic_cmds[] = {
     { "led_blink",   led_blink,   NULL, NULL, "BLINK - ON",        "press any button to cancel." },
     { "led_blinksw", led_blinksw, NULL, NULL, "blinkswitch - ON.", "press any button to cancel"  },
     { "stop",        stop,        NULL, NULL, "stop.",             NULL                          },
+    { "led_fade",    led_fade,    NULL, NULL, "fadecycle",             NULL                          },
     { NULL,          NULL,        NULL, NULL, NULL,                NULL                          }
 };
 
@@ -69,6 +72,7 @@ static const command_t timer_cmds[] = {
     { "settimer_", NULL, setTimer, "<INTEGER[1,100]>",        NULL, NULL },
     { "setdimmf_",  NULL, setDimmf,  "<INTEGER[0,7]>", NULL, NULL },
     { "setdimm_",   NULL, setDimm,   "<INTEGER[0,100]>", NULL, NULL },
+    { "setdimmlin_",   NULL, setDimmlin,   "<INTEGER[0,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
     { "pwmtoggle",  pwmtoggle,      NULL, NULL, NULL,           NULL },
     { NULL,        NULL, NULL,     NULL,            NULL, NULL }
@@ -306,7 +310,7 @@ static void setTimer(unsigned int wert){
 
 static void setDimmf(unsigned int wert){
 
-    static const char *const freq[] = { "128Hz","256Hz","512Hz", "1024Hz", "2048Hz", "4096Hz", "8192Hz" };
+    static const char *const freq[] = { "128Hz","256Hz","512Hz","1024Hz", "2048Hz", "4096Hz", "8192Hz" };
 
     if (wert < 0 || wert > 7){
         system();
@@ -347,6 +351,36 @@ static void setDimm(unsigned int wert){
     standardColour();
     linebreak(1);
 }
+
+static void setDimmlin(unsigned int wert){
+
+    if (wert < 0 || wert > 100){
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("setdimmlin_");
+        sendNum(wert);
+        linebreak(1);
+        return;
+    }
+
+    int dimmwert = perceived_to_duty(wert*100, TA2CCR2);
+
+
+    timersetDimm(dimmwert);
+
+    system();
+    sends("dimm set to: ");
+    cyan();
+    sendNum(dimmwert);
+    standardColour();
+    linebreak(1);
+}
+
 static void statuspwm(void){
     pwmstatus();
+}
+
+static void led_fade(void){
+    ledfade();
 }

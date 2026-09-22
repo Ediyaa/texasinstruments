@@ -10,6 +10,9 @@
 
 void ledInit(void);
 
+unsigned int perceived_to_duty(unsigned int wert, unsigned int ccr0);
+void ledfade(void);
+
 void led_rot_an(void);
 
 void led_grn_an(void);
