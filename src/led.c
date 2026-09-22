@@ -107,6 +107,7 @@ void ledfade(void){
     static unsigned int wert = 1;
     static int richtung = 1;
 while (1){
+    __delay_cycles(100);
     if (richtung == 1){
         wert++;
         if (wert >= 10000){
@@ -122,7 +123,8 @@ while (1){
     if (wert == 0){
         return;
     }
+    timersetDimm(perceived_to_duty(wert, TA2CCR2));
 }
 
-    timersetDimm(perceived_to_duty(wert, TA2CCR2));
+    
 }
