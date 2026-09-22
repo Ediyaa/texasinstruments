@@ -104,9 +104,9 @@ unsigned int perceived_to_duty(unsigned int wert, unsigned int ccr0)
 }
 
 void ledfade(void){
-    static unsigned int wert = 0;
+    static unsigned int wert = 1;
     static int richtung = 1;
-
+while (1){
     if (richtung == 1){
         wert++;
         if (wert >= 10000){
@@ -119,6 +119,10 @@ void ledfade(void){
             richtung = 1;
         }
     }
+    if (wert == 0){
+        return;
+    }
+}
 
     timersetDimm(perceived_to_duty(wert, TA2CCR2));
 }
