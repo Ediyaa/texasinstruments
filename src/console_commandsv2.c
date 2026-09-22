@@ -354,7 +354,7 @@ static void setDimm(unsigned int wert){
 
 static void setDimmlin(unsigned int wert){
 
-    if (wert < 0 || wert > 100){
+    if (wert > 100u){
         system();
         sends("invalid argument for: ");
         red();
@@ -364,8 +364,10 @@ static void setDimmlin(unsigned int wert){
         return;
     }
 
-    int dimmwert = perceived_to_duty(wert*100, TA2CCR2);
-
+    /* wert ist L* in Prozent (0..100) -> *100 ergibt die 0..10000, die
+     * perceived_to_duty erwartet. ccr0 = 10000, damit das Ergebnis
+     * bereits in der Einheit vorliegt, die timersetDimm entgegennimmt. */
+    unsigned int dimmwert = perceived_to_duty(wert * 100u, 10000u);
 
     timersetDimm(dimmwert);
 
