@@ -12,6 +12,7 @@ void consoleUartInit(void);
 void sendc(char c);
 void sends(const char *s);
 void sendNum(unsigned int n);
+void sendNumL(unsigned long n);
 
 unsigned char rx_available(void);
 void rx_flush(void);

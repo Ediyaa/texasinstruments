@@ -83,6 +83,37 @@ uint16_t adcLast(void)
     return s_value;     /* 16-Bit-Lesezugriff ist auf dem MSP430 atomar */
 }
 
+/* ---------- Übersetzung ---------- */
+
+/* V_in = N * AV_CC / 4095, kaufmännisch gerundet */
+uint16_t adcToMillivolt(uint16_t n)
+{
+    return (uint16_t)(((uint32_t)n * ADC_AVCC_MV + 4095UL / 2UL) / 4095UL);
+}
+
+/* R_T unten: R_T = R_1 * N / (4095 - N)
+   R_T oben:  R_T = R_1 * (4095 - N) / N
+   AV_CC kürzt sich heraus, kaufmännisch gerundet */
+uint32_t adcToOhm(uint16_t n)
+{
+    uint32_t zaehler;
+    uint32_t nenner;
+
+#if ADC_RT_LOW_SIDE
+    zaehler = ADC_R1_OHM * (uint32_t)n;
+    nenner  = 4095UL - (uint32_t)n;
+#else
+    zaehler = ADC_R1_OHM * (4095UL - (uint32_t)n);
+    nenner  = (uint32_t)n;
+#endif
+
+    if (nenner == 0UL) {
+        return ADC_OHM_INVALID;
+    }
+
+    return (zaehler + nenner / 2UL) / nenner;
+}
+
 /* ---------- Interruptroutine ---------- */
 
 #pragma vector = ADC12_VECTOR

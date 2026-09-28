@@ -2,6 +2,7 @@
 #define SRC_INCLUDE_CONSOLE_COMMANDS_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 
 void commands(char *eingabe);
 
@@ -9,5 +10,8 @@ void listCommands(void);
 
 /* true: main gibt jeden neuen ADC-Wert auf der Konsole aus */
 extern volatile bool adcstreamflag;
+
+/* Wert N in der mit adcunit_ gewählten Einheit ausgeben */
+void adcPrint(uint16_t n);
 
 #endif /* SRC_INCLUDE_CONSOLE_COMMANDS_H_ */

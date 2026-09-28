@@ -42,7 +42,7 @@ int main(void)
         if (adcGet(&adcValue)) {
             /* Verarbeitung von adcValue (0 ... 4095) folgt später */
             if (adcstreamflag) {
-                sendNum(adcValue);
+                adcPrint(adcValue);
                 linebreak(1);
             }
         }

@@ -42,8 +42,12 @@ static void led_fade(void);
 
 static void adcRead(void);
 static void adcStream(void);
+static void adcUnit(unsigned int wert);
 
 volatile bool adcstreamflag = false;
+
+/* Ausgabeeinheit für adcread und adcstream: 0 = N, 1 = mV, 2 = Ohm */
+static unsigned int adcunit = 0u;
 
 
 static const command_t general_cmds[] = {
@@ -93,6 +97,7 @@ static const command_t clock_cmds[] = {
 static const command_t adc_cmds[] = {
     { "adcread",   adcRead,   NULL, NULL, NULL, NULL },
     { "adcstream", adcStream, NULL, NULL, NULL, NULL },
+    { "adcunit_",  NULL,      adcUnit, "<INTEGER[0,2]> 0=N 1=mV 2=Ohm", NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
 
@@ -173,6 +178,22 @@ void sendNum(unsigned int n){
         buf[--i] = (char)('0' + (n % 10u));
         n /= 10u;
     } while (n != 0u);
+
+    sends(&buf[i]);
+}
+
+/* wie sendNum, aber 32 Bit: maximal 4294967295 -> 10 Ziffern plus Terminator */
+void sendNumL(unsigned long n){
+
+    char buf[11];
+    int  i = 10;
+
+    buf[i] = '\0';
+
+    do {
+        buf[--i] = (char)('0' + (n % 10uL));
+        n /= 10uL;
+    } while (n != 0uL);
 
     sends(&buf[i]);
 }
@@ -400,12 +421,58 @@ static void led_fade(void){
     ledfade();
 }
 
-/* Letzten Wert N (0 ... 4095) aus ADC12MEM0 einmal ausgeben */
+/* Wert in der mit adcunit_ gewählten Einheit ausgeben (ohne Farbe/Zeilenumbruch) */
+void adcPrint(uint16_t n){
+
+    if (adcunit == 1u){
+        sendNum(adcToMillivolt(n));
+        sends(" mV");
+    }
+    else if (adcunit == 2u){
+        uint32_t r = adcToOhm(n);
+        if (r == ADC_OHM_INVALID){
+            sends("inf Ohm");
+        }
+        else {
+            sendNumL(r);
+            sends(" Ohm");
+        }
+    }
+    else {
+        sendNum(n);
+    }
+}
+
+/* Letzten Wert einmal ausgeben */
 static void adcRead(void){
     system();
     sends("ADC: ");
     cyan();
-    sendNum(adcLast());
+    adcPrint(adcLast());
+    standardColour();
+    linebreak(1);
+}
+
+/* Ausgabeeinheit wählen */
+static void adcUnit(unsigned int wert){
+
+    static const char *const unit[] = { "N (raw)", "mV", "Ohm" };
+
+    if (wert > 2u){
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("adcunit_");
+        linebreak(1);
+        return;
+    }
+
+    adcunit = wert;
+
+    system();
+    sends("ADC unit set to: ");
+    cyan();
+    sends(unit[wert]);
     standardColour();
     linebreak(1);
 }
