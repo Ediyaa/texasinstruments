@@ -26,7 +26,7 @@
 /* Lage von R_T im Spannungsteiler:
    1 -> AV_CC - R_1 - Mittelknoten - R_T - AV_SS  (R_T unten)
    0 -> AV_CC - R_T - Mittelknoten - R_1 - AV_SS  (R_T oben) */
-#define ADC_RT_LOW_SIDE      1
+#define ADC_RT_LOW_SIDE      0
 
 /* Rückgabewert von adcToOhm, wenn R_T unendlich wäre (Division durch 0) */
 #define ADC_OHM_INVALID      0xFFFFFFFFUL
