@@ -31,6 +31,19 @@
 /* Rückgabewert von adcToOhm, wenn R_T unendlich wäre (Division durch 0) */
 #define ADC_OHM_INVALID      0xFFFFFFFFUL
 
+/* Steinhart-Hart-Koeffizienten des NTC 10 kOhm:
+     1/T = A + B * ln(R_T) + C * (ln(R_T))^3,  T in K, R_T in Ohm
+   Ausgleichsrechnung (kleinste Quadrate in 1/T) über alle 22 Punkte der
+   Kennlinie von sensorshop24 (-50 °C ... +150 °C, Stand 2015).
+   Abweichung zur Tabelle: <= 0,06 K von -50 °C bis +70 °C,
+   bis 0,73 K darüber (dort ist die Tabelle nur auf 0,01 kOhm gerundet) */
+#define ADC_SH_A             1.13729162e-03f
+#define ADC_SH_B             2.32805103e-04f
+#define ADC_SH_C             9.21787251e-08f
+
+/* Rückgabewert von adcToCentiCelsius, wenn R_T ungültig ist */
+#define ADC_TEMP_INVALID     ((int32_t)0x80000000L)
+
 /* ---------- Schnittstelle ---------- */
 
 /* Konfiguriert P6.0, ADC12_A und Timer TB0 und startet die Abtastung */
@@ -48,5 +61,8 @@ uint16_t adcToMillivolt(uint16_t n);
 
 /* Übersetzung N -> Widerstand R_T in Ohm (ADC_OHM_INVALID bei Division durch 0) */
 uint32_t adcToOhm(uint16_t n);
+
+/* Übersetzung N -> Temperatur in 0,01 °C (ADC_TEMP_INVALID bei ungültigem R_T) */
+int32_t adcToCentiCelsius(uint16_t n);
 
 #endif /* SRC_INCLUDE_ADC_H_ */

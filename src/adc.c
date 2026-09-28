@@ -1,4 +1,5 @@
 #include <msp430.h>
+#include <math.h>
 #include "include/adc.h"
 
 /* ---------- interner Zustand ---------- */
@@ -112,6 +113,25 @@ uint32_t adcToOhm(uint16_t n)
     }
 
     return (zaehler + nenner / 2UL) / nenner;
+}
+
+/* Steinhart-Hart: 1/T = A + B * ln(R_T) + C * (ln(R_T))^3,
+   Ergebnis in 0,01 °C, kaufmännisch gerundet */
+int32_t adcToCentiCelsius(uint16_t n)
+{
+    uint32_t r = adcToOhm(n);
+    float    l;
+    float    t;
+
+    if (r == ADC_OHM_INVALID || r == 0UL) {
+        return ADC_TEMP_INVALID;
+    }
+
+    l = logf((float)r);
+    t = 1.0f / (ADC_SH_A + ADC_SH_B * l + ADC_SH_C * l * l * l);   /* in K */
+    t = (t - 273.15f) * 100.0f;                                      /* in 0,01 °C */
+
+    return (int32_t)((t >= 0.0f) ? (t + 0.5f) : (t - 0.5f));
 }
 
 /* ---------- Interruptroutine ---------- */

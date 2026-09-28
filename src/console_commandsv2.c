@@ -46,7 +46,7 @@ static void adcUnit(unsigned int wert);
 
 volatile bool adcstreamflag = false;
 
-/* Ausgabeeinheit für adcread und adcstream: 0 = N, 1 = mV, 2 = Ohm */
+/* Ausgabeeinheit für adcread und adcstream: 0 = N, 1 = mV, 2 = Ohm, 3 = °C */
 static unsigned int adcunit = 0u;
 
 
@@ -97,7 +97,7 @@ static const command_t clock_cmds[] = {
 static const command_t adc_cmds[] = {
     { "adcread",   adcRead,   NULL, NULL, NULL, NULL },
     { "adcstream", adcStream, NULL, NULL, NULL, NULL },
-    { "adcunit_",  NULL,      adcUnit, "<INTEGER[0,2]> 0=N 1=mV 2=Ohm", NULL, NULL },
+    { "adcunit_",  NULL,      adcUnit, "<INTEGER[0,3]> 0=N 1=mV 2=Ohm 3=degC", NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
 
@@ -438,6 +438,25 @@ void adcPrint(uint16_t n){
             sends(" Ohm");
         }
     }
+    else if (adcunit == 3u){
+        int32_t t = adcToCentiCelsius(n);
+        if (t == ADC_TEMP_INVALID){
+            sends("invalid");
+        }
+        else {
+            if (t < 0L){
+                sendc('-');
+                t = -t;
+            }
+            sendNumL((unsigned long)(t / 100L));
+            sendc('.');
+            if ((t % 100L) < 10L){
+                sendc('0');
+            }
+            sendNum((unsigned int)(t % 100L));
+            sends(" \xc2\xb0""C");       /* UTF-8 Gradzeichen */
+        }
+    }
     else {
         sendNum(n);
     }
@@ -456,9 +475,9 @@ static void adcRead(void){
 /* Ausgabeeinheit wählen */
 static void adcUnit(unsigned int wert){
 
-    static const char *const unit[] = { "N (raw)", "mV", "Ohm" };
+    static const char *const unit[] = { "N (raw)", "mV", "Ohm", "\xc2\xb0""C" };
 
-    if (wert > 2u){
+    if (wert > 3u){
         system();
         sends("invalid argument for: ");
         red();
