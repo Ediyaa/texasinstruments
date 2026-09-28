@@ -6,6 +6,7 @@
 #include "include/led.h"
 #include "include/timer.h"
 #include "include/clk.h"
+#include "include/adc.h"
 #include "string.h"
 #include <stdbool.h>
 
@@ -39,6 +40,11 @@ static void setClock(unsigned int wert);
 static void statusclock(void);
 static void led_fade(void);
 
+static void adcRead(void);
+static void adcStream(void);
+
+volatile bool adcstreamflag = false;
+
 
 static const command_t general_cmds[] = {
     { "help",  listCommands, NULL, NULL, NULL,             NULL },
@@ -71,7 +77,7 @@ static const command_t led_dynamic_cmds[] = {
 static const command_t timer_cmds[] = {
     { "settimer_", NULL, setTimer, "<INTEGER[1,100]>",        NULL, NULL },
     { "setdimmf_",  NULL, setDimmf,  "<INTEGER[0,7]>", NULL, NULL },
-    { "setdimm_",   NULL, setDimm,   "<INTEGER[0,100]>", NULL, NULL },
+    { "setdimm_",   NULL, setDimm,   "<INTEGER[0,65536]>", NULL, NULL },
     { "setdimmlin_",   NULL, setDimmlin,   "<INTEGER[0,100]>", NULL, NULL },
     { "statuspwm",  statuspwm, NULL,    NULL, NULL, NULL },
     { "pwmtoggle",  pwmtoggle,      NULL, NULL, NULL,           NULL },
@@ -84,12 +90,19 @@ static const command_t clock_cmds[] = {
     { NULL,        NULL, NULL,     NULL,            NULL, NULL }
 };
 
+static const command_t adc_cmds[] = {
+    { "adcread",   adcRead,   NULL, NULL, NULL, NULL },
+    { "adcstream", adcStream, NULL, NULL, NULL, NULL },
+    { NULL,        NULL,      NULL, NULL, NULL, NULL }
+};
+
 static const commandGroup_t groups[] = {
     { "General Options",     general_cmds     },
     { "LED Options Static",  led_static_cmds  },
     { "LED Options Dynamic", led_dynamic_cmds },
     { "Timer Options",       timer_cmds       },
     { "Clock Options",       clock_cmds       },
+    { "ADC Options",         adc_cmds         },
     { NULL,                  NULL             }
 };
 
@@ -333,7 +346,7 @@ static void setDimmf(unsigned int wert){
 
 static void setDimm(unsigned int wert){
 
-    if (wert < 0 || wert > 10000){
+    if (wert < 0 || wert > 65535){
         system();
         sends("invalid argument for: ");
         red();
@@ -385,4 +398,22 @@ static void statuspwm(void){
 
 static void led_fade(void){
     ledfade();
+}
+
+/* Letzten Wert N (0 ... 4095) aus ADC12MEM0 einmal ausgeben */
+static void adcRead(void){
+    system();
+    sends("ADC: ");
+    cyan();
+    sendNum(adcLast());
+    standardColour();
+    linebreak(1);
+}
+
+/* Fortlaufende Ausgabe jedes neuen Werts ein- bzw. ausschalten */
+static void adcStream(void){
+    adcstreamflag = !adcstreamflag;
+    system();
+    sends(adcstreamflag ? "ADC stream - ON" : "ADC stream - OFF");
+    linebreak(1);
 }

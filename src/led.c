@@ -107,7 +107,7 @@ void ledfade(void){
     static unsigned int wert = 1;
     static int richtung = 1;
 while (1){
-    __delay_cycles(100);
+    __delay_cycles(10000);
     if (richtung == 1){
         wert++;
         if (wert >= 10000){

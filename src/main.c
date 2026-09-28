@@ -1,4 +1,7 @@
 #include <msp430.h>
+
+#include "include/adc.h"
+
 #include "include/timer.h"
 #include <src/include/console.h>
 #include <src/include/uart.h>
@@ -25,13 +28,24 @@ int main(void)
     ledInit();
     timerInitA0();
     timerInitA2();
+    adcInit();
 //    while(1){
 //        led_switch();
 //    }
+    uint16_t adcValue;
+
     while(1){
 
 
         console_task();
+
+        if (adcGet(&adcValue)) {
+            /* Verarbeitung von adcValue (0 ... 4095) folgt später */
+            if (adcstreamflag) {
+                sendNum(adcValue);
+                linebreak(1);
+            }
+        }
 
 
     }
