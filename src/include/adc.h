@@ -44,6 +44,16 @@
 /* Rückgabewert von adcToCentiCelsius, wenn R_T ungültig ist */
 #define ADC_TEMP_INVALID     ((int32_t)0x80000000L)
 
+/* Blockmessung: Anzahl Werte pro Block (2048 * 2 Byte = 4 KB RAM)
+   Dauer bei f_A ca. 200 kHz: ca. 10 ms */
+#define ADC_BLOCK_LEN        2048UL
+
+/* Tiefpass: y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K
+   Grenzfrequenz ca. f_A / (2 * pi * 2^K), bei f_A ca. 200 kHz:
+   K = 4 -> ca. 2 kHz, K = 6 -> ca. 500 Hz, K = 8 -> ca. 125 Hz
+   Einschwingen: Zeitkonstante 2^K Werte, K <= 8 ist bei 2048 Werten eingeschwungen */
+#define ADC_LP_SHIFT         6u
+
 /* ---------- Schnittstelle ---------- */
 
 /* Konfiguriert P6.0, ADC12_A und Timer TB0 und startet die Abtastung */
@@ -64,5 +74,13 @@ uint32_t adcToOhm(uint16_t n);
 
 /* Übersetzung N -> Temperatur in 0,01 °C (ADC_TEMP_INVALID bei ungültigem R_T) */
 int32_t adcToCentiCelsius(uint16_t n);
+
+/* Nimmt ADC_BLOCK_LEN Werte mit maximaler Rate per DMA auf (blockiert ca. 10 ms),
+   danach läuft wieder der Normalbetrieb mit TB0 */
+void adcBlockCapture(void);
+
+/* Auswertung des zuletzt aufgenommenen Blocks, Ergebnis N (0 ... 4095) */
+uint16_t adcBlockMean(void);      /* Mittelwert                  */
+uint16_t adcBlockLowpass(void);   /* Tiefpass, letzter Ausgangswert */
 
 #endif /* SRC_INCLUDE_ADC_H_ */

@@ -43,6 +43,8 @@ static void led_fade(void);
 static void adcRead(void);
 static void adcStream(void);
 static void adcUnit(unsigned int wert);
+static void adcMean(void);
+static void adcLowpass(void);
 
 volatile bool adcstreamflag = false;
 
@@ -98,6 +100,8 @@ static const command_t adc_cmds[] = {
     { "adcread",   adcRead,   NULL, NULL, NULL, NULL },
     { "adcstream", adcStream, NULL, NULL, NULL, NULL },
     { "adcunit_",  NULL,      adcUnit, "<INTEGER[0,3]> 0=N 1=mV 2=Ohm 3=degC", NULL, NULL },
+    { "adcmean",   adcMean,   NULL, NULL, NULL, NULL },
+    { "adclowpass", adcLowpass, NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
 
@@ -501,5 +505,27 @@ static void adcStream(void){
     adcstreamflag = !adcstreamflag;
     system();
     sends(adcstreamflag ? "ADC stream - ON" : "ADC stream - OFF");
+    linebreak(1);
+}
+
+/* Block aufnehmen und Mittelwert ausgeben */
+static void adcMean(void){
+    adcBlockCapture();
+    system();
+    sends("ADC mean: ");
+    cyan();
+    adcPrint(adcBlockMean());
+    standardColour();
+    linebreak(1);
+}
+
+/* Block aufnehmen und Tiefpass-Ergebnis ausgeben */
+static void adcLowpass(void){
+    adcBlockCapture();
+    system();
+    sends("ADC lowpass: ");
+    cyan();
+    adcPrint(adcBlockLowpass());
+    standardColour();
     linebreak(1);
 }
