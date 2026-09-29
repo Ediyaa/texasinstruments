@@ -60,7 +60,7 @@ static void adc_config_periodic(void)
     /* ADC12MCTL0:
        Bitfeld ADC12SREFx = 000  -> V_R+ = AV_CC, V_R- = AV_SS (ratiometrisch)
        Bitfeld ADC12INCHx = 0000 -> Kanal A0 (P6.0) */
-    ADC12MCTL0 = ADC12SREF_0 | ADC12INCH_0;
+    ADC12MCTL0 = ADC12SREF_0 | ADC12INCH_11;
 
     /* Interrupt bei fertigem Ergebnis in ADC12MEM0 */
     ADC12IFG = 0;
