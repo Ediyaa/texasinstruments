@@ -13,11 +13,29 @@ static uint16_t s_block[ADC_BLOCK_LEN];
 
 /* ---------- Initialisierung ---------- */
 
+/* ADC12_A sofort anhalten, egal in welchem Zustand die Ablaufsteuerung ist:
+   ADC12ENC = 0, danach ADC12CONSEQx = 0 (erst jetzt änderbar) und ADC12ON = 0.
+   Wartet begrenzt, bis ADC12BUSY = 0. Das Ergebnis einer abgebrochenen
+   Umsetzung ist ungültig, alle Flags werden gelöscht. */
+static void adc_stop(void)
+{
+    uint16_t timeout = 1000u;
+
+    ADC12CTL0 &= ~ADC12ENC;
+    ADC12CTL1 &= ~ADC12CONSEQ_3;
+    ADC12CTL0 &= ~ADC12ON;
+
+    while ((ADC12CTL1 & ADC12BUSY) && --timeout) {
+    }
+
+    ADC12IFG = 0;
+}
+
 /* ADC12_A für Einzelwerte konfigurieren, Start durch TB0.1 (Normalbetrieb) */
 static void adc_config_periodic(void)
 {
-    /* ADC12_A sperren, damit die Konfiguration geändert werden darf */
-    ADC12CTL0 &= ~ADC12ENC;
+    /* ADC12_A anhalten, damit die Konfiguration geändert werden darf */
+    adc_stop();
 
     /* ADC12CTL0:
        Bitfeld ADC12SHT0x = 0001 -> Abtastzeit 8 Takte ADC12CLK
@@ -148,17 +166,20 @@ int32_t adcToCentiCelsius(uint16_t n)
 
 /* ADC_BLOCK_LEN Werte am Stück aufnehmen, blockiert bis der Block voll ist.
    ADC12_A läuft frei (ADC12MSC = 1), jede Umsetzung startet sofort die nächste:
-   f_A = f_ADC12OSC / (8 + 13 + 1 Takte) = ca. 200 ... 230 kHz.
-   DMA-Kanal 0 kopiert jeden Wert von ADC12MEM0 nach s_block[i]. */
-void adcBlockCapture(void)
+   f_A = f_ADC12OSC / 4 / (8 + 13 + 1 Takte) = ca. 48 ... 61 kHz.
+   DMA-Kanal 0 kopiert jeden Wert von ADC12MEM0 nach s_block[i].
+   Rückgabe false, wenn der Block nicht innerhalb des Timeouts voll wurde. */
+bool adcBlockCapture(void)
 {
     uint16_t ie = ADC12IE;
-
-    ADC12CTL0 &= ~ADC12ENC;
+    uint32_t timeout = ADC_BLOCK_TIMEOUT;
+    bool     ok;
 
     /* DMA wird von ADC12IFG0 nur ausgelöst, wenn ADC12IE0 = 0 ist (SLAU208Q, 28.2.10) */
-    ADC12IE  = 0;
-    ADC12IFG = 0;
+    ADC12IE = 0;
+
+    /* Timerbetrieb vollständig beenden, bevor umkonfiguriert wird */
+    adc_stop();
 
     /* ADC12CTL0:
        Bitfeld ADC12SHT0x = 0001 -> Abtastzeit 8 Takte ADC12CLK
@@ -167,9 +188,11 @@ void adcBlockCapture(void)
     ADC12CTL0 = ADC12SHT0_1 | ADC12MSC | ADC12ON;
 
     /* ADC12CTL1: wie im Normalbetrieb, aber
-       Bitfeld ADC12SHSx = 00 -> Start durch ADC12SC (Software) */
+       Bitfeld ADC12SHSx = 00  -> Start durch ADC12SC (Software)
+       Bitfeld ADC12DIVx = 011 -> Teiler 4, damit DMA-Kanal 0 bei MCLK ca. 1 MHz
+                                  sicher jeden Wert abholt, bevor der nächste fertig ist */
     ADC12CTL1 = ADC12CSTARTADD_0 | ADC12SHS_0 | ADC12SHP |
-                ADC12DIV_0 | ADC12SSEL_0 | ADC12CONSEQ_2;
+                ADC12DIV_3 | ADC12SSEL_0 | ADC12CONSEQ_2;
 
     /* DMACTL0: Bitfeld DMA0TSELx = 24 -> Auslöser ADC12IFGx (MSP430F5529) */
     DMACTL0 = (DMACTL0 & 0xFFE0u) | DMA0TSEL_24;
@@ -186,22 +209,28 @@ void adcBlockCapture(void)
        Bit DMAEN           = 1   -> Kanal freigeben (wird nach DMA0SZ Übertragungen gelöscht) */
     DMA0CTL = DMADT_0 | DMADSTINCR_3 | DMASRCINCR_0 | DMAEN;
 
+    /* DMA-Kanal 0 wird nur von einer steigenden Flanke von ADC12IFG0 ausgelöst.
+       Das Flag muss daher direkt vor dem Start 0 sein */
+    ADC12IFG = 0;
+
     /* Erste Umsetzung per Software starten */
     ADC12CTL0 |= ADC12ENC | ADC12SC;
 
-    while (DMA0CTL & DMAEN) {
+    while ((DMA0CTL & DMAEN) && --timeout) {
         /* warten, bis der Block voll ist */
     }
 
-    /* Wiederholbetrieb stoppt am Ende der laufenden Umsetzung (SLAU208Q, 28.2.7.6) */
-    ADC12CTL0 &= ~ADC12ENC;
-    while (ADC12CTL1 & ADC12BUSY) {
-    }
-    DMA0CTL &= ~DMAIFG;
+    ok = ((DMA0CTL & DMAEN) == 0u);
+
+    /* Wandler anhalten, DMA-Kanal 0 abschalten (falls Timeout) */
+    adc_stop();
+    DMA0CTL &= ~(DMAEN | DMAIFG);
 
     /* Normalbetrieb wiederherstellen */
     adc_config_periodic();
     ADC12IE = ie;
+
+    return ok;
 }
 
 /* Arithmetischer Mittelwert über den Block, kaufmännisch gerundet */

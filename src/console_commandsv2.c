@@ -510,7 +510,14 @@ static void adcStream(void){
 
 /* Block aufnehmen und Mittelwert ausgeben */
 static void adcMean(void){
-    adcBlockCapture();
+    if (!adcBlockCapture()){
+        system();
+        red();
+        sends("ADC block capture failed (timeout)");
+        standardColour();
+        linebreak(1);
+        return;
+    }
     system();
     sends("ADC mean: ");
     cyan();
@@ -521,7 +528,14 @@ static void adcMean(void){
 
 /* Block aufnehmen und Tiefpass-Ergebnis ausgeben */
 static void adcLowpass(void){
-    adcBlockCapture();
+    if (!adcBlockCapture()){
+        system();
+        red();
+        sends("ADC block capture failed (timeout)");
+        standardColour();
+        linebreak(1);
+        return;
+    }
     system();
     sends("ADC lowpass: ");
     cyan();

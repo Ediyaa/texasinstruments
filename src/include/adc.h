@@ -45,12 +45,17 @@
 #define ADC_TEMP_INVALID     ((int32_t)0x80000000L)
 
 /* Blockmessung: Anzahl Werte pro Block (2048 * 2 Byte = 4 KB RAM)
-   Dauer bei f_A ca. 200 kHz: ca. 10 ms */
+   Dauer bei f_A ca. 48 ... 61 kHz: ca. 34 ... 43 ms */
 #define ADC_BLOCK_LEN        2048UL
 
+/* Abbruch der Blockmessung nach so vielen Durchläufen der Warteschleife
+   (mindestens ca. 8 MCLK-Takte je Durchlauf: bei 4,25 MHz >= ca. 190 ms,
+   bei 1 MHz ca. 1 s). Verhindert, dass die Konsole hängen bleibt */
+#define ADC_BLOCK_TIMEOUT    100000UL
+
 /* Tiefpass: y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K
-   Grenzfrequenz ca. f_A / (2 * pi * 2^K), bei f_A ca. 200 kHz:
-   K = 4 -> ca. 2 kHz, K = 6 -> ca. 500 Hz, K = 8 -> ca. 125 Hz
+   Grenzfrequenz ca. f_A / (2 * pi * 2^K), bei f_A ca. 55 kHz:
+   K = 4 -> ca. 550 Hz, K = 6 -> ca. 140 Hz, K = 8 -> ca. 35 Hz
    Einschwingen: Zeitkonstante 2^K Werte, K <= 8 ist bei 2048 Werten eingeschwungen */
 #define ADC_LP_SHIFT         6u
 
@@ -75,9 +80,10 @@ uint32_t adcToOhm(uint16_t n);
 /* Übersetzung N -> Temperatur in 0,01 °C (ADC_TEMP_INVALID bei ungültigem R_T) */
 int32_t adcToCentiCelsius(uint16_t n);
 
-/* Nimmt ADC_BLOCK_LEN Werte mit maximaler Rate per DMA auf (blockiert ca. 10 ms),
-   danach läuft wieder der Normalbetrieb mit TB0 */
-void adcBlockCapture(void);
+/* Nimmt ADC_BLOCK_LEN Werte per DMA auf (blockiert ca. 34 ... 43 ms),
+   danach läuft wieder der Normalbetrieb mit TB0.
+   Liefert false, wenn der Block nicht vollständig aufgenommen wurde */
+bool adcBlockCapture(void);
 
 /* Auswertung des zuletzt aufgenommenen Blocks, Ergebnis N (0 ... 4095) */
 uint16_t adcBlockMean(void);      /* Mittelwert                  */
