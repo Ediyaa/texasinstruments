@@ -48,6 +48,7 @@ static void adcLowpass(void);
 static void adcHist(void);
 static void adcLpRate(unsigned int wert);
 static void adcLpHist(void);
+static void adcLpTau(unsigned int wert);
 
 volatile bool adcstreamflag = false;
 
@@ -107,6 +108,7 @@ static const command_t adc_cmds[] = {
     { "adclowpass", adcLowpass, NULL, NULL, NULL, NULL },
     { "adchist",   adcHist,   NULL, NULL, NULL, NULL },
     { "adclprate_", NULL,     adcLpRate, "<INTEGER[1,3]> 1=1kHz 2=10kHz 3=100kHz", NULL, NULL },
+    { "adclptau_", NULL,      adcLpTau, "<INTEGER[1,9]> tau = 2^K samples", NULL, NULL },
     { "adclphist", adcLpHist, NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
@@ -648,6 +650,41 @@ static void adcLpRate(unsigned int wert){
     linebreak(1);
 }
 
+/* Zeitkonstante des Blocktiefpasses ausgeben: "2^K = N samples = T us"
+   (T bei der eingestellten Rate, gerundet) */
+static void lpTauPrint(void){
+    uint16_t k   = adcLpShiftGet();
+    uint32_t n   = 1UL << k;
+    uint32_t f   = adcBlockRateHz();
+    uint32_t tus = (n * 1000000UL + f / 2UL) / f;
+
+    sends("2^");
+    sendNum(k);
+    sends(" = ");
+    sendNumL(n);
+    sends(" samples = ");
+    sendNumL(tus);
+    sends(" us");
+}
+
+/* Zeitkonstante des Blocktiefpasses einstellen: K = wert, tau = 2^K Werte */
+static void adcLpTau(unsigned int wert){
+    if (!adcLpShiftSet((uint16_t)wert)){
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("adclptau_");
+        linebreak(1);
+        return;
+    }
+    system();
+    sends("lowpass time constant set to: ");
+    cyan();
+    lpTauPrint();
+    standardColour();
+    linebreak(1);
+}
+
 /* Blöcke aufnehmen, Tiefpass über jeden Block, Histogramm der gefilterten Werte.
    Ausgabe erst nach dem letzten Block */
 static void adcLpHist(void){
@@ -675,6 +712,10 @@ static void adcLpHist(void){
     sends(", samples: ");
     cyan();
     sendNumL(ADC_LP_HIST_SAMPLES);
+    standardColour();
+    sends(", tau: ");
+    cyan();
+    lpTauPrint();
     standardColour();
     linebreak(1);
 

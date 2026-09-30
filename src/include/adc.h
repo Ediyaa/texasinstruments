@@ -96,9 +96,15 @@
 #define ADC_BLK_RATE_DEFAULT 3u
 
 /* Tiefpass der Blockmessung: y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K,
-   K = ADC_LP_SHIFT (1 ... 8). Grenzfrequenz ca. f_A / (2 * pi * 2^K),
-   bei K = 6: 1 kHz -> ca. 2,5 Hz, 10 kHz -> ca. 25 Hz, 100 kHz -> ca. 250 Hz */
+   Zeitkonstante 2^K Werte, Grenzfrequenz ca. f_A / (2 * pi * 2^K),
+   bei K = 6: 1 kHz -> ca. 2,5 Hz, 10 kHz -> ca. 25 Hz, 100 kHz -> ca. 250 Hz.
+   ADC_LP_SHIFT ist K nach dem Start, zur Laufzeit mit adclptau_ einstellbar */
 #define ADC_LP_SHIFT         6u
+
+/* Grenzen für K. Höchstens 9: der Start rechnet (Blocksumme << K), und
+   2048 * 4095 * 2^9 passt gerade noch in 32 Bit */
+#define ADC_LP_SHIFT_MIN     1u
+#define ADC_LP_SHIFT_MAX     9u
 
 /* Anzahl Blöcke je Histogramm (höchstens 31, sonst laufen die 16-Bit-Zähler über) */
 #define ADC_LP_HIST_BLOCKS   8u
@@ -158,6 +164,11 @@ bool     adcBlockRateSet(uint16_t step);
 uint16_t adcBlockRateGet(void);
 uint32_t adcBlockRateHz(void);
 
+/* K des Tiefpasses der Blockmessung (Zeitkonstante 2^K Werte).
+   adcLpShiftSet liefert false, wenn K außerhalb ADC_LP_SHIFT_MIN ... MAX liegt */
+bool     adcLpShiftSet(uint16_t k);
+uint16_t adcLpShiftGet(void);
+
 /* Nimmt ADC_BLOCK_LEN Werte mit der eingestellten Rate per DMA auf
    (blockiert ADC_BLOCK_LEN / Rate), danach läuft wieder der Normalbetrieb
    mit TB0. Liefert false, wenn der Block nicht vollständig aufgenommen wurde */
@@ -191,7 +202,7 @@ typedef struct {
 void adcHistogram(adcHist_t *h);
 
 /* ADC_LP_HIST_BLOCKS Blöcke mit der eingestellten Rate aufnehmen, jeden Block
-   mit dem Tiefpass (ADC_LP_SHIFT) filtern und die gefilterten Werte zählen.
+   mit dem Tiefpass (K aus adcLpShiftSet) filtern und die gefilterten Werte zählen.
    Das Fenster liegt um den Mittelwert des ersten Blocks. Blockiert, gibt nichts
    aus. Liefert false, wenn ein Block nicht vollständig aufgenommen wurde */
 bool adcBlockLowpassHistogram(adcHist_t *h);

@@ -336,6 +336,7 @@ static const adc_blk_step_t s_blk_steps[3] = {
 };
 
 static uint16_t s_blk_step = ADC_BLK_RATE_DEFAULT;   /* eingestellte Stufe 1 ... 3 */
+static uint16_t s_lp_shift = ADC_LP_SHIFT;           /* K des Blocktiefpasses      */
 
 /* Periode von TB0 in SMCLK-Takten für die eingestellte Stufe, gerundet */
 static uint16_t adc_blk_period(void)
@@ -357,6 +358,20 @@ bool adcBlockRateSet(uint16_t step)
 uint16_t adcBlockRateGet(void)
 {
     return s_blk_step;
+}
+
+bool adcLpShiftSet(uint16_t k)
+{
+    if (k < ADC_LP_SHIFT_MIN || k > ADC_LP_SHIFT_MAX) {
+        return false;
+    }
+    s_lp_shift = k;
+    return true;
+}
+
+uint16_t adcLpShiftGet(void)
+{
+    return s_lp_shift;
 }
 
 /* Tatsächliche Rate = SMCLK / Periode, gerundet */
@@ -462,24 +477,26 @@ uint16_t adcBlockMean(void)
 }
 
 /* Tiefpass erster Ordnung über den Block, jeden Ausgangswert ins Histogramm zählen:
-     y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K,  K = ADC_LP_SHIFT
+     y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K,  K = s_lp_shift (adclptau_)
    y wird mit 2^K skaliert geführt, y / 2^K gerundet (abgeschnitten läge der
    Ausgang im Mittel zu hoch). Start beim Mittelwert des Blocks, damit kein
    Einschwingen vom ersten Wert aus mitgezählt wird */
 static void adc_blk_lowpass_count(adcHist_t *h)
 {
-    uint32_t sum = 0UL;
+    uint16_t k    = s_lp_shift;
+    uint32_t half = 1UL << (k - 1u);  /* 0,5 in der Skalierung 2^K, zum Runden */
+    uint32_t sum  = 0UL;
     uint32_t y;
     uint16_t i;
 
     for (i = 0u; i < ADC_BLOCK_LEN; i++) {
         sum += s_block[i];
     }
-    y = ((sum << ADC_LP_SHIFT) + ADC_BLOCK_LEN / 2UL) / ADC_BLOCK_LEN;
+    y = ((sum << k) + ADC_BLOCK_LEN / 2UL) / ADC_BLOCK_LEN;
 
     for (i = 0u; i < ADC_BLOCK_LEN; i++) {
-        y = y - ((y + (1UL << (ADC_LP_SHIFT - 1u))) >> ADC_LP_SHIFT) + s_block[i];
-        adc_hist_count(h, (uint16_t)((y + (1UL << (ADC_LP_SHIFT - 1u))) >> ADC_LP_SHIFT));
+        y = y - ((y + half) >> k) + s_block[i];
+        adc_hist_count(h, (uint16_t)((y + half) >> k));
     }
 }
 
