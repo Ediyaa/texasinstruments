@@ -97,17 +97,28 @@
 /* Anzahl der Klassen im Fenster */
 #define ADC_HIST_BINS        (2u * ADC_HIST_HALF + 1u)
 
+/* ---------- Laufende Filter (Befehle adcmean, adclowpass) ---------- */
+
+/* Gleitender Mittelwert über die letzten ADC_FILT_MEAN_LEN Werte */
+#define ADC_FILT_MEAN_LEN    16u
+
+/* Tiefpass erster Ordnung: y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K,
+   K = ADC_FILT_LP_SHIFT (mindestens 1). Zeitkonstante ca. 2^K Werte */
+#define ADC_FILT_LP_SHIFT    4u
+
 /* ---------- Schnittstelle ---------- */
 
 /* Konfiguriert P6.0, die interne Referenz, ADC12_A und Timer TB0
    und startet die Abtastung */
 void adcInit(void);
 
-/* Liefert true und den neuesten Wert N (0 ... 4095), falls seit dem
-   letzten Aufruf ein neuer Wert vorliegt, sonst false */
+/* Liefert true und den neuesten Wert N (0 ... 4095, gefiltert, falls
+   adcmean/adclowpass an), falls seit dem letzten Aufruf ein neuer Wert
+   vorliegt, sonst false */
 bool adcGet(uint16_t *n);
 
-/* Liefert den zuletzt umgesetzten Wert N (0 ... 4095), ohne ihn abzuholen */
+/* Liefert den zuletzt umgesetzten Wert N (0 ... 4095, gefiltert wie adcGet),
+   ohne ihn abzuholen */
 uint16_t adcLast(void);
 
 /* Übersetzung N -> Eingangsspannung in mV */
@@ -127,6 +138,15 @@ bool adcBlockCapture(void);
 /* Auswertung des zuletzt aufgenommenen Blocks, Ergebnis N (0 ... 4095) */
 uint16_t adcBlockMean(void);      /* Mittelwert                  */
 uint16_t adcBlockLowpass(void);   /* Tiefpass, letzter Ausgangswert */
+
+/* Laufende Filter für Normalbetrieb (adcGet, adcLast) und Histogramm.
+   Reihenfolge: Rohwert -> gleitender Mittelwert (falls an) -> Tiefpass (falls an).
+   Umschalten startet die Filter des Normalbetriebs neu.
+   Toggle-Funktionen liefern den neuen Zustand */
+bool adcMeanToggle(void);
+bool adcLowpassToggle(void);
+bool adcMeanGet(void);
+bool adcLowpassGet(void);
 
 /* Ergebnis von adcHistogram */
 typedef struct {

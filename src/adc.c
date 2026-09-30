@@ -11,6 +11,72 @@ static volatile bool     s_new_value;  /* true, wenn noch nicht abgeholt */
 #pragma NOINIT(s_block)
 static uint16_t s_block[ADC_BLOCK_LEN];
 
+/* ---------- Laufende Filter: Zustand ---------- */
+
+/* Zustand eines laufenden Filters (gleitender Mittelwert und Tiefpass) */
+typedef struct {
+    uint16_t buf[ADC_FILT_MEAN_LEN];  /* letzte Rohwerte (Ringspeicher)               */
+    uint32_t sum;                     /* Summe über buf                                */
+    uint16_t idx;                     /* nächste Schreibstelle in buf                  */
+    uint32_t y;                       /* Tiefpass-Ausgang, mit 2^ADC_FILT_LP_SHIFT skaliert */
+    bool     started;                 /* false: nächster Wert startet den Filter neu   */
+} adc_filter_t;
+
+static volatile bool s_mean_on    = false;   /* Befehl adcmean    */
+static volatile bool s_lowpass_on = false;   /* Befehl adclowpass */
+
+static adc_filter_t s_filt_stream;           /* Normalbetrieb (Interruptroutine) */
+static adc_filter_t s_filt_hist;             /* Histogramm                       */
+
+/* Einen Rohwert x filtern: x -> gleitender Mittelwert (falls an) -> Tiefpass (falls an).
+   Beim ersten Wert nach einem Neustart werden Ringspeicher und Tiefpass mit x
+   gefüllt, damit der Ausgang nicht von 0 aus einschwingt */
+static uint16_t adc_filter(adc_filter_t *f, uint16_t x)
+{
+    uint16_t v = x;
+    uint16_t i;
+
+    if (!f->started) {
+        for (i = 0u; i < ADC_FILT_MEAN_LEN; i++) {
+            f->buf[i] = x;
+        }
+        f->sum     = (uint32_t)x * ADC_FILT_MEAN_LEN;
+        f->idx     = 0u;
+        f->y       = (uint32_t)x << ADC_FILT_LP_SHIFT;
+        f->started = true;
+    }
+
+    if (s_mean_on) {
+        f->sum = f->sum - f->buf[f->idx] + x;
+        f->buf[f->idx] = x;
+        if (++f->idx >= ADC_FILT_MEAN_LEN) {
+            f->idx = 0u;
+        }
+        v = (uint16_t)((f->sum + ADC_FILT_MEAN_LEN / 2u) / ADC_FILT_MEAN_LEN);
+    }
+
+    if (s_lowpass_on) {
+        /* y wird mit 2^K skaliert geführt: y = y - y / 2^K + v.
+           y / 2^K gerundet statt abgeschnitten, sonst liegt der Ausgang
+           im Mittel bis zu eine Stufe zu hoch */
+        f->y = f->y - ((f->y + (1UL << (ADC_FILT_LP_SHIFT - 1u))) >> ADC_FILT_LP_SHIFT) + v;
+        v = (uint16_t)((f->y + (1UL << (ADC_FILT_LP_SHIFT - 1u))) >> ADC_FILT_LP_SHIFT);
+    }
+
+    return v;
+}
+
+/* Filter des Normalbetriebs neu starten. Aufruf aus dem Hauptprogramm,
+   Interrupt dafür kurz gesperrt */
+static void adc_filter_restart_stream(void)
+{
+    uint16_t sr = __get_SR_register();
+
+    __disable_interrupt();
+    s_filt_stream.started = false;
+    __bis_SR_register(sr & GIE);
+}
+
 /* ---------- Initialisierung ---------- */
 
 /* ADC12_A sofort anhalten, egal in welchem Zustand die Ablaufsteuerung ist:
@@ -314,11 +380,38 @@ uint16_t adcBlockLowpass(void)
     return (uint16_t)((y + (1UL << (ADC_LP_SHIFT - 1u))) >> ADC_LP_SHIFT);
 }
 
+/* ---------- Laufende Filter: schalten ---------- */
+
+bool adcMeanToggle(void)
+{
+    s_mean_on = !s_mean_on;
+    adc_filter_restart_stream();
+    return s_mean_on;
+}
+
+bool adcLowpassToggle(void)
+{
+    s_lowpass_on = !s_lowpass_on;
+    adc_filter_restart_stream();
+    return s_lowpass_on;
+}
+
+bool adcMeanGet(void)
+{
+    return s_mean_on;
+}
+
+bool adcLowpassGet(void)
+{
+    return s_lowpass_on;
+}
+
 /* ---------- Histogramm ---------- */
 
 /* Eine Vorlaufumsetzung legt das Fenster fest, danach werden ADC_HIST_SAMPLES
-   Einzelumsetzungen per Software ausgezählt. Der Normalbetrieb (TB0.1) ruht
-   so lange und läuft danach wieder */
+   Einzelumsetzungen per Software ausgezählt, jeweils nach den laufenden
+   Filtern (adcmean, adclowpass), falls an. Der Normalbetrieb (TB0.1) ruht
+   so lange und läuft danach mit neu gestarteten Filtern wieder */
 void adcHistogram(adcHist_t *h)
 {
     uint16_t ie = ADC12IE;
@@ -331,8 +424,11 @@ void adcHistogram(adcHist_t *h)
 
     adc_config_single();
 
+    /* Filter starten mit der Vorlaufumsetzung */
+    s_filt_hist.started = false;
+
     /* Vorlaufumsetzung: legt das Fenster fest, wird nicht gezählt */
-    n = adc_read_single();
+    n = adc_filter(&s_filt_hist, adc_read_single());
 
     h->low   = (n > ADC_HIST_HALF) ? (uint16_t)(n - ADC_HIST_HALF) : 0u;
     h->min   = 0xFFFFu;
@@ -344,7 +440,7 @@ void adcHistogram(adcHist_t *h)
     }
 
     for (i = 0u; i < ADC_HIST_SAMPLES; i++) {
-        n = adc_read_single();
+        n = adc_filter(&s_filt_hist, adc_read_single());
 
         if (n < h->min) h->min = n;
         if (n > h->max) h->max = n;
@@ -360,7 +456,9 @@ void adcHistogram(adcHist_t *h)
         }
     }
 
-    /* Normalbetrieb wiederherstellen */
+    /* Normalbetrieb wiederherstellen, dessen Filter neu starten
+       (Interruptroutine ist hier noch gesperrt) */
+    s_filt_stream.started = false;
     adc_config_periodic();
     ADC12IE = ie;
 }
@@ -372,7 +470,7 @@ __interrupt void adc12_isr(void)
 {
     switch (__even_in_range(ADC12IV, 34)) {
     case 6:                           /* ADC12IFG0 */
-        s_value     = ADC12MEM0;      /* Lesen löscht ADC12IFG0 */
+        s_value     = adc_filter(&s_filt_stream, ADC12MEM0);   /* Lesen löscht ADC12IFG0 */
         s_new_value = true;
         break;
     default:

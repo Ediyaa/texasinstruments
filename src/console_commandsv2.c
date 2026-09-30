@@ -107,11 +107,6 @@ static const command_t adc_cmds[] = {
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
 
-static const command_t misc_cmds[] = {
-//    { "stop",   readADCOff,  NULL, NULL, NULL, NULL },
-    { NULL,        NULL,      NULL, NULL, NULL, NULL }
-};
-
 static const commandGroup_t groups[] = {
     { "General Options",     general_cmds     },
     { "LED Options Static",  led_static_cmds  },
@@ -119,7 +114,6 @@ static const commandGroup_t groups[] = {
     { "Timer Options",       timer_cmds       },
     { "Clock Options",       clock_cmds       },
     { "ADC Options",         adc_cmds         },
-    { "Misc Options",        misc_cmds         },
     { NULL,                  NULL             }
 };
 
@@ -516,39 +510,19 @@ static void adcStream(void){
     linebreak(1);
 }
 
-/* Block aufnehmen und Mittelwert ausgeben */
+/* Gleitenden Mittelwert für adcstream, adcread und adchist ein- bzw. ausschalten */
 static void adcMean(void){
-    if (!adcBlockCapture()){
-        system();
-        red();
-        sends("ADC block capture failed (timeout)");
-        standardColour();
-        linebreak(1);
-        return;
-    }
+    bool on = adcMeanToggle();
     system();
-    sends("ADC mean: ");
-    cyan();
-    adcPrint(adcBlockMean());
-    standardColour();
+    sends(on ? "ADC mean filter - ON" : "ADC mean filter - OFF");
     linebreak(1);
 }
 
-/* Block aufnehmen und Tiefpass-Ergebnis ausgeben */
+/* Tiefpass für adcstream, adcread und adchist ein- bzw. ausschalten */
 static void adcLowpass(void){
-    if (!adcBlockCapture()){
-        system();
-        red();
-        sends("ADC block capture failed (timeout)");
-        standardColour();
-        linebreak(1);
-        return;
-    }
+    bool on = adcLowpassToggle();
     system();
-    sends("ADC lowpass: ");
-    cyan();
-    adcPrint(adcBlockLowpass());
-    standardColour();
+    sends(on ? "ADC lowpass filter - ON" : "ADC lowpass filter - OFF");
     linebreak(1);
 }
 
@@ -598,6 +572,18 @@ static void adcHist(void){
     sends("ADC histogram, samples: ");
     cyan();
     sendNum(ADC_HIST_SAMPLES);
+    standardColour();
+    sends(", filter: ");
+    cyan();
+    if (!adcMeanGet() && !adcLowpassGet()){
+        sends("none");
+    }
+    if (adcMeanGet()){
+        sends("mean ");
+    }
+    if (adcLowpassGet()){
+        sends("lowpass");
+    }
     standardColour();
     linebreak(1);
 
