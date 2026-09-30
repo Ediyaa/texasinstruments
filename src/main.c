@@ -1,6 +1,7 @@
 #include <msp430.h>
 
 #include "include/adc.h"
+#include "include/clk.h"
 #include "include/ports.h"
 #include "include/timer.h"
 #include <src/include/console.h>
@@ -23,6 +24,7 @@ int main(void)
 {
     watchdogInit();
     portsInit();
+    clock_init_xt1();               /* MCLK = SMCLK = 2^22 Hz, ACLK = XT1 (clk.h) */
     uartInit();    
     consoleUartInit();
 

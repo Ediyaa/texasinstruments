@@ -106,6 +106,20 @@ static void adc_ref_on(void)
     __delay_cycles(ADC_REF_SETTLE_CYCLES);
 }
 
+/* Timer TB0 neu starten: Quelle tbssel (Bitfeld TBSSELx), Periode in Takten.
+   TB0CCR0 -> Periode, TB0CCR1 -> Flanke in der Periodenmitte,
+   Ausgabemodus 7 (Reset/Set): steigende Flanke von TB0.1 bei Periodenbeginn */
+static void adc_timer_start(uint16_t tbssel, uint16_t period)
+{
+    TB0CTL   = TBCLR;                 /* Bitfeld MCx = 00 -> angehalten */
+    TB0CCR0  = (uint16_t)(period - 1u);
+    TB0CCR1  = (uint16_t)((period - 1u) / 2u);
+    TB0CCTL1 = OUTMOD_7;
+
+    /* Bitfeld MCx = 01 -> Aufwärtszählen bis TB0CCR0 */
+    TB0CTL   = tbssel | MC_1 | TBCLR;
+}
+
 /* ADC12_A für Einzelwerte konfigurieren, Start durch TB0.1 (Normalbetrieb) */
 static void adc_config_periodic(void)
 {
@@ -188,15 +202,8 @@ void adcInit(void)
 
     adc_config_periodic();
 
-    /* Timer TB0:
-       TB0CCR0 -> Periode, TB0CCR1 -> Flanke in der Periodenmitte
-       Ausgabemodus 7 (Reset/Set): steigende Flanke bei Periodenbeginn */
-    TB0CCR0  = (uint16_t)ADC_TIMER_PERIOD;
-    TB0CCR1  = (uint16_t)(ADC_TIMER_PERIOD / 2UL);
-    TB0CCTL1 = OUTMOD_7;
-
-    /* Bitfeld TBSSELx = 01 -> ACLK, Bitfeld MCx = 01 -> Aufwärtszählen bis TB0CCR0 */
-    TB0CTL = TBSSEL_1 | MC_1 | TBCLR;
+    /* Timer TB0: Bitfeld TBSSELx = 01 -> ACLK, Periode für ADC_SAMPLE_RATE_HZ */
+    adc_timer_start(TBSSEL_1, (uint16_t)(ADC_TIMER_PERIOD + 1UL));
 }
 
 /* ---------- Abholen ---------- */
@@ -280,37 +287,123 @@ int32_t adcToCentiCelsius(uint16_t n)
     return (int32_t)((t >= 0.0f) ? (t + 0.5f) : (t - 0.5f));
 }
 
+/* ---------- Histogramm: Hilfsfunktionen ---------- */
+
+/* Histogramm leeren, Fenster um center legen */
+static void adc_hist_reset(adcHist_t *h, uint16_t center)
+{
+    uint16_t i;
+
+    h->low   = (center > ADC_HIST_HALF) ? (uint16_t)(center - ADC_HIST_HALF) : 0u;
+    h->min   = 0xFFFFu;
+    h->max   = 0u;
+    h->below = 0u;
+    h->above = 0u;
+    for (i = 0u; i < ADC_HIST_BINS; i++) {
+        h->count[i] = 0u;
+    }
+}
+
+/* Einen Wert n ins Histogramm zählen */
+static void adc_hist_count(adcHist_t *h, uint16_t n)
+{
+    if (n < h->min) h->min = n;
+    if (n > h->max) h->max = n;
+
+    if (n < h->low) {
+        h->below++;
+    }
+    else if (n > (uint16_t)(h->low + ADC_HIST_BINS - 1u)) {
+        h->above++;
+    }
+    else {
+        h->count[n - h->low]++;
+    }
+}
+
 /* ---------- Blockmessung ---------- */
 
+/* Stufen der Blockabtastung: Rate und Abtastzeit (adc.h) */
+typedef struct {
+    uint32_t rate_hz;                 /* Abtastrate in Hz                  */
+    uint16_t sht;                     /* Bitfeld ADC12SHT0x (Abtastzeit)   */
+} adc_blk_step_t;
+
+static const adc_blk_step_t s_blk_steps[3] = {
+    { ADC_BLK_RATE1_HZ, ADC_BLK_SHT1 },
+    { ADC_BLK_RATE2_HZ, ADC_BLK_SHT2 },
+    { ADC_BLK_RATE3_HZ, ADC_BLK_SHT3 }
+};
+
+static uint16_t s_blk_step = ADC_BLK_RATE_DEFAULT;   /* eingestellte Stufe 1 ... 3 */
+
+/* Periode von TB0 in SMCLK-Takten für die eingestellte Stufe, gerundet */
+static uint16_t adc_blk_period(void)
+{
+    uint32_t f = s_blk_steps[s_blk_step - 1u].rate_hz;
+
+    return (uint16_t)((ADC_BLK_SMCLK_HZ + f / 2UL) / f);
+}
+
+bool adcBlockRateSet(uint16_t step)
+{
+    if (step < 1u || step > 3u) {
+        return false;
+    }
+    s_blk_step = step;
+    return true;
+}
+
+uint16_t adcBlockRateGet(void)
+{
+    return s_blk_step;
+}
+
+/* Tatsächliche Rate = SMCLK / Periode, gerundet */
+uint32_t adcBlockRateHz(void)
+{
+    uint32_t p = adc_blk_period();
+
+    return (ADC_BLK_SMCLK_HZ + p / 2UL) / p;
+}
+
 /* ADC_BLOCK_LEN Werte am Stück aufnehmen, blockiert bis der Block voll ist.
-   ADC12_A läuft frei (ADC12MSC = 1), jede Umsetzung startet sofort die nächste:
-   f_A = f_ADC12OSC / 4 / (8 + 13 + 1 Takte) = ca. 48 ... 61 kHz.
-   DMA-Kanal 0 kopiert jeden Wert von ADC12MEM0 nach s_block[i].
+   Timer TB0 läuft dafür an SMCLK mit der eingestellten Rate, jede steigende
+   Flanke von TB0.1 startet eine Umsetzung. DMA-Kanal 0 kopiert jeden Wert
+   von ADC12MEM0 nach s_block[i], der Prozessorkern ist pro Wert nicht beteiligt.
+   Danach laufen wieder Normalbetrieb und TB0 an ACLK.
    Rückgabe false, wenn der Block nicht innerhalb des Timeouts voll wurde. */
 bool adcBlockCapture(void)
 {
-    uint16_t ie = ADC12IE;
-    uint32_t timeout = ADC_BLOCK_TIMEOUT;
+    uint16_t ie     = ADC12IE;
+    uint16_t period = adc_blk_period();
+    /* Timeout in Durchläufen der Warteschleife: Blockdauer in MCLK-Takten / 2
+       (MCLK = SMCLK, clk.h). Bei mindestens 4 Takten je Durchlauf wartet
+       die Schleife mindestens doppelt so lange, wie der Block dauert */
+    uint32_t timeout = ((uint32_t)ADC_BLOCK_LEN * period) / 2UL;
     bool     ok;
 
     /* DMA wird von ADC12IFG0 nur ausgelöst, wenn ADC12IE0 = 0 ist (SLAU208Q, 28.2.10) */
     ADC12IE = 0;
 
-    /* Timerbetrieb vollständig beenden, bevor umkonfiguriert wird */
+    /* Normalbetrieb vollständig beenden, bevor umkonfiguriert wird */
     adc_stop();
+    TB0CTL = TBCLR;                   /* Bitfeld MCx = 00 -> Timer angehalten */
 
     /* ADC12CTL0:
-       Bitfeld ADC12SHT0x = 0001 -> Abtastzeit 8 Takte ADC12CLK
-       Bit ADC12MSC       = 1    -> nächste Umsetzung startet automatisch
-       Bit ADC12ON        = 1    -> ADC einschalten */
-    ADC12CTL0 = ADC12SHT0_1 | ADC12MSC | ADC12ON;
+       Bitfeld ADC12SHT0x = Abtastzeit der Stufe (adc.h)
+       Bit ADC12MSC       = 0 -> jede Umsetzung braucht eine eigene Flanke
+       Bit ADC12ON        = 1 -> ADC einschalten */
+    ADC12CTL0 = s_blk_steps[s_blk_step - 1u].sht | ADC12ON;
 
-    /* ADC12CTL1: wie im Normalbetrieb, aber
-       Bitfeld ADC12SHSx = 00  -> Start durch ADC12SC (Software)
-       Bitfeld ADC12DIVx = 011 -> Teiler 4, damit DMA-Kanal 0 bei MCLK ca. 1 MHz
-                                  sicher jeden Wert abholt, bevor der nächste fertig ist */
-    ADC12CTL1 = ADC12CSTARTADD_0 | ADC12SHS_0 | ADC12SHP |
-                ADC12DIV_3 | ADC12SSEL_0 | ADC12CONSEQ_2;
+    /* ADC12CTL1: Takt wie im Normalbetrieb,
+       Bitfeld ADC12SHSx    = 11 -> Startimpuls von TB0.1
+       Bitfeld ADC12CONSEQx = 10 -> Einzelkanal wiederholt */
+    ADC12CTL1 = ADC12CSTARTADD_0 | ADC12SHS_3 | ADC12SHP |
+                ADC_DIV | ADC_SSEL | ADC12CONSEQ_2;
+
+    ADC12CTL2  = ADC12RES_2;
+    ADC12MCTL0 = ADC12SREF_1 | ADC12INCH_0;
 
     /* DMACTL0: Bitfeld DMA0TSELx = 24 -> Auslöser ADC12IFGx (MSP430F5529) */
     DMACTL0 = (DMACTL0 & 0xFFE0u) | DMA0TSEL_24;
@@ -330,9 +423,10 @@ bool adcBlockCapture(void)
     /* DMA-Kanal 0 wird nur von einer steigenden Flanke von ADC12IFG0 ausgelöst.
        Das Flag muss daher direkt vor dem Start 0 sein */
     ADC12IFG = 0;
+    ADC12CTL0 |= ADC12ENC;
 
-    /* Erste Umsetzung per Software starten */
-    ADC12CTL0 |= ADC12ENC | ADC12SC;
+    /* Timer an SMCLK starten (Bitfeld TBSSELx = 10), ab jetzt eine Umsetzung je Periode */
+    adc_timer_start(TBSSEL_2, period);
 
     while ((DMA0CTL & DMAEN) && --timeout) {
         /* warten, bis der Block voll ist */
@@ -340,12 +434,15 @@ bool adcBlockCapture(void)
 
     ok = ((DMA0CTL & DMAEN) == 0u);
 
-    /* Wandler anhalten, DMA-Kanal 0 abschalten (falls Timeout) */
+    /* ADC anhalten, DMA-Kanal 0 abschalten (falls Timeout) */
     adc_stop();
     DMA0CTL &= ~(DMAEN | DMAIFG);
 
-    /* Normalbetrieb wiederherstellen */
+    /* Normalbetrieb wiederherstellen, dessen Filter neu starten
+       (Interruptroutine ist hier noch gesperrt) */
+    s_filt_stream.started = false;
     adc_config_periodic();
+    adc_timer_start(TBSSEL_1, (uint16_t)(ADC_TIMER_PERIOD + 1UL));
     ADC12IE = ie;
 
     return ok;
@@ -364,20 +461,43 @@ uint16_t adcBlockMean(void)
     return (uint16_t)((sum + ADC_BLOCK_LEN / 2UL) / ADC_BLOCK_LEN);
 }
 
-/* Rekursiver Tiefpass erster Ordnung über den Block:
+/* Tiefpass erster Ordnung über den Block, jeden Ausgangswert ins Histogramm zählen:
      y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K,  K = ADC_LP_SHIFT
-   y wird mit 2^K skaliert geführt (K Nachkommabits), Start mit dem ersten Wert.
-   Ergebnis ist der letzte Ausgangswert, kaufmännisch gerundet */
-uint16_t adcBlockLowpass(void)
+   y wird mit 2^K skaliert geführt, y / 2^K gerundet (abgeschnitten läge der
+   Ausgang im Mittel zu hoch). Start beim Mittelwert des Blocks, damit kein
+   Einschwingen vom ersten Wert aus mitgezählt wird */
+static void adc_blk_lowpass_count(adcHist_t *h)
 {
-    uint32_t y = (uint32_t)s_block[0] << ADC_LP_SHIFT;
+    uint32_t sum = 0UL;
+    uint32_t y;
     uint16_t i;
 
-    for (i = 1u; i < ADC_BLOCK_LEN; i++) {
-        y = y - (y >> ADC_LP_SHIFT) + (uint32_t)s_block[i];
+    for (i = 0u; i < ADC_BLOCK_LEN; i++) {
+        sum += s_block[i];
+    }
+    y = ((sum << ADC_LP_SHIFT) + ADC_BLOCK_LEN / 2UL) / ADC_BLOCK_LEN;
+
+    for (i = 0u; i < ADC_BLOCK_LEN; i++) {
+        y = y - ((y + (1UL << (ADC_LP_SHIFT - 1u))) >> ADC_LP_SHIFT) + s_block[i];
+        adc_hist_count(h, (uint16_t)((y + (1UL << (ADC_LP_SHIFT - 1u))) >> ADC_LP_SHIFT));
+    }
+}
+
+bool adcBlockLowpassHistogram(adcHist_t *h)
+{
+    uint16_t b;
+
+    for (b = 0u; b < ADC_LP_HIST_BLOCKS; b++) {
+        if (!adcBlockCapture()) {
+            return false;
+        }
+        if (b == 0u) {
+            adc_hist_reset(h, adcBlockMean());
+        }
+        adc_blk_lowpass_count(h);
     }
 
-    return (uint16_t)((y + (1UL << (ADC_LP_SHIFT - 1u))) >> ADC_LP_SHIFT);
+    return true;
 }
 
 /* ---------- Laufende Filter: schalten ---------- */
@@ -429,31 +549,10 @@ void adcHistogram(adcHist_t *h)
 
     /* Vorlaufumsetzung: legt das Fenster fest, wird nicht gezählt */
     n = adc_filter(&s_filt_hist, adc_read_single());
-
-    h->low   = (n > ADC_HIST_HALF) ? (uint16_t)(n - ADC_HIST_HALF) : 0u;
-    h->min   = 0xFFFFu;
-    h->max   = 0u;
-    h->below = 0u;
-    h->above = 0u;
-    for (i = 0u; i < ADC_HIST_BINS; i++) {
-        h->count[i] = 0u;
-    }
+    adc_hist_reset(h, n);
 
     for (i = 0u; i < ADC_HIST_SAMPLES; i++) {
-        n = adc_filter(&s_filt_hist, adc_read_single());
-
-        if (n < h->min) h->min = n;
-        if (n > h->max) h->max = n;
-
-        if (n < h->low) {
-            h->below++;
-        }
-        else if (n > (uint16_t)(h->low + ADC_HIST_BINS - 1u)) {
-            h->above++;
-        }
-        else {
-            h->count[n - h->low]++;
-        }
+        adc_hist_count(h, adc_filter(&s_filt_hist, adc_read_single()));
     }
 
     /* Normalbetrieb wiederherstellen, dessen Filter neu starten

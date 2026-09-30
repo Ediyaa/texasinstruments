@@ -70,20 +70,41 @@
 /* Rückgabewert von adcToCentiCelsius, wenn R_T ungültig ist */
 #define ADC_TEMP_INVALID     ((int32_t)0x80000000L)
 
-/* Blockmessung: Anzahl Werte pro Block (2048 * 2 Byte = 4 KB RAM)
-   Dauer bei f_A ca. 48 ... 61 kHz: ca. 34 ... 43 ms */
+/* ---------- Blockmessung mit Tiefpass (Befehle adclprate_, adclphist) ---------- */
+
+/* Anzahl Werte pro Block (2048 * 2 Byte = 4 KB RAM).
+   Dauer = ADC_BLOCK_LEN / Rate: 2,05 s (1 kHz), 205 ms (10 kHz), 20,5 ms (100 kHz) */
 #define ADC_BLOCK_LEN        2048UL
 
-/* Abbruch der Blockmessung nach so vielen Durchläufen der Warteschleife
-   (mindestens ca. 8 MCLK-Takte je Durchlauf: bei 4,25 MHz >= ca. 190 ms,
-   bei 1 MHz ca. 1 s). Verhindert, dass die Konsole hängen bleibt */
-#define ADC_BLOCK_TIMEOUT    100000UL
+/* SMCLK in Hz für Timer TB0 während der Blockmessung. main ruft beim Start
+   clock_init_xt1() auf -> SMCLK = 2^22 Hz (clk.h). Nach setclock_3
+   (4,25 MHz) liegen die Raten um 1,3 % höher */
+#define ADC_BLK_SMCLK_HZ     4194304UL
 
-/* Tiefpass: y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K
-   Grenzfrequenz ca. f_A / (2 * pi * 2^K), bei f_A ca. 55 kHz:
-   K = 4 -> ca. 550 Hz, K = 6 -> ca. 140 Hz, K = 8 -> ca. 35 Hz
-   Einschwingen: Zeitkonstante 2^K Werte, K <= 8 ist bei 2048 Werten eingeschwungen */
+/* Abtastraten der Stufen 1, 2, 3 in Hz */
+#define ADC_BLK_RATE1_HZ     1000UL
+#define ADC_BLK_RATE2_HZ     10000UL
+#define ADC_BLK_RATE3_HZ     100000UL
+
+/* Abtastzeit je Stufe (Bitfeld ADC12SHT0x). Abtastzeit + 13 Takte Umsetzung
+   müssen beim kleinsten f_ADC12CLK = 2,1 MHz in eine Periode passen */
+#define ADC_BLK_SHT1         ADC12SHT0_12    /* 1024 Takte: 494 us < 1 ms   */
+#define ADC_BLK_SHT2         ADC12SHT0_6     /* 128 Takte:  67 us < 100 us  */
+#define ADC_BLK_SHT3         ADC12SHT0_0     /* 4 Takte:    8,1 us < 10 us  */
+
+/* Stufe nach dem Start (1 ... 3) */
+#define ADC_BLK_RATE_DEFAULT 3u
+
+/* Tiefpass der Blockmessung: y[n] = y[n-1] + (x[n] - y[n-1]) / 2^K,
+   K = ADC_LP_SHIFT (1 ... 8). Grenzfrequenz ca. f_A / (2 * pi * 2^K),
+   bei K = 6: 1 kHz -> ca. 2,5 Hz, 10 kHz -> ca. 25 Hz, 100 kHz -> ca. 250 Hz */
 #define ADC_LP_SHIFT         6u
+
+/* Anzahl Blöcke je Histogramm (höchstens 31, sonst laufen die 16-Bit-Zähler über) */
+#define ADC_LP_HIST_BLOCKS   8u
+
+/* Anzahl gezählter Werte je Histogramm */
+#define ADC_LP_HIST_SAMPLES  (ADC_LP_HIST_BLOCKS * ADC_BLOCK_LEN)
 
 /* ---------- Histogramm ---------- */
 
@@ -130,14 +151,20 @@ uint32_t adcToOhm(uint16_t n);
 /* Übersetzung N -> Temperatur in 0,01 °C (ADC_TEMP_INVALID bei ungültigem R_T) */
 int32_t adcToCentiCelsius(uint16_t n);
 
-/* Nimmt ADC_BLOCK_LEN Werte per DMA auf (blockiert ca. 34 ... 43 ms),
-   danach läuft wieder der Normalbetrieb mit TB0.
-   Liefert false, wenn der Block nicht vollständig aufgenommen wurde */
+/* Stufe der Blockabtastung: 1 = 1 kHz, 2 = 10 kHz, 3 = 100 kHz.
+   adcBlockRateSet liefert false bei ungültiger Stufe,
+   adcBlockRateHz liefert die tatsächliche Rate (SMCLK / Periode von TB0) */
+bool     adcBlockRateSet(uint16_t step);
+uint16_t adcBlockRateGet(void);
+uint32_t adcBlockRateHz(void);
+
+/* Nimmt ADC_BLOCK_LEN Werte mit der eingestellten Rate per DMA auf
+   (blockiert ADC_BLOCK_LEN / Rate), danach läuft wieder der Normalbetrieb
+   mit TB0. Liefert false, wenn der Block nicht vollständig aufgenommen wurde */
 bool adcBlockCapture(void);
 
-/* Auswertung des zuletzt aufgenommenen Blocks, Ergebnis N (0 ... 4095) */
-uint16_t adcBlockMean(void);      /* Mittelwert                  */
-uint16_t adcBlockLowpass(void);   /* Tiefpass, letzter Ausgangswert */
+/* Mittelwert des zuletzt aufgenommenen Blocks, Ergebnis N (0 ... 4095) */
+uint16_t adcBlockMean(void);
 
 /* Laufende Filter für Normalbetrieb (adcGet, adcLast) und Histogramm.
    Reihenfolge: Rohwert -> gleitender Mittelwert (falls an) -> Tiefpass (falls an).
@@ -162,5 +189,11 @@ typedef struct {
    Umsetzungen ausgezählt. Blockiert bis zur letzten Umsetzung, gibt nichts aus.
    Danach läuft wieder der Normalbetrieb mit TB0 */
 void adcHistogram(adcHist_t *h);
+
+/* ADC_LP_HIST_BLOCKS Blöcke mit der eingestellten Rate aufnehmen, jeden Block
+   mit dem Tiefpass (ADC_LP_SHIFT) filtern und die gefilterten Werte zählen.
+   Das Fenster liegt um den Mittelwert des ersten Blocks. Blockiert, gibt nichts
+   aus. Liefert false, wenn ein Block nicht vollständig aufgenommen wurde */
+bool adcBlockLowpassHistogram(adcHist_t *h);
 
 #endif /* SRC_INCLUDE_ADC_H_ */

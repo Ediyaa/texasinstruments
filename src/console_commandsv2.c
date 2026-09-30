@@ -46,6 +46,8 @@ static void adcUnit(unsigned int wert);
 static void adcMean(void);
 static void adcLowpass(void);
 static void adcHist(void);
+static void adcLpRate(unsigned int wert);
+static void adcLpHist(void);
 
 volatile bool adcstreamflag = false;
 
@@ -104,6 +106,8 @@ static const command_t adc_cmds[] = {
     { "adcmean",   adcMean,   NULL, NULL, NULL, NULL },
     { "adclowpass", adcLowpass, NULL, NULL, NULL, NULL },
     { "adchist",   adcHist,   NULL, NULL, NULL, NULL },
+    { "adclprate_", NULL,     adcLpRate, "<INTEGER[1,3]> 1=1kHz 2=10kHz 3=100kHz", NULL, NULL },
+    { "adclphist", adcLpHist, NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
 
@@ -542,11 +546,8 @@ static void sendNumPad(unsigned int n, unsigned int w){
     sendNum(n);
 }
 
-/* Histogramm aufnehmen und als Balkendiagramm ausgeben.
-   Die Ausgabe beginnt erst nach der letzten Umsetzung, damit die
-   serielle Ausgabe nicht in die Messung fällt */
-static void adcHist(void){
-    static adcHist_t h;                   /* nicht auf dem Stack */
+/* Balken, min, max und Werte außerhalb des Fensters ausgeben */
+static void histPrint(const adcHist_t *h){
     uint16_t i;
     uint16_t j;
     uint16_t first = ADC_HIST_BINS;      /* erste belegte Klasse    */
@@ -554,19 +555,57 @@ static void adcHist(void){
     uint16_t peak  = 0u;                  /* größte Anzahl je Klasse */
     uint16_t bar;
 
+    for (i = 0u; i < ADC_HIST_BINS; i++){
+        if (h->count[i] != 0u){
+            if (first == ADC_HIST_BINS) first = i;
+            last = i;
+            if (h->count[i] > peak) peak = h->count[i];
+        }
+    }
+
+    /* Nur von der ersten bis zur letzten belegten Klasse. Liegen alle
+       Ergebnisse außerhalb des Fensters, ist first > last und die
+       Schleife läuft nicht (peak = 0 wird dann nicht als Teiler benutzt) */
+    for (i = first; i <= last; i++){
+        sendNumPad((unsigned int)(h->low + i), 4u);
+        sends(" |");
+        sendNumPad(h->count[i], 5u);
+        sendc(' ');
+
+        /* aufgerundet, damit jede belegte Klasse mindestens ein Zeichen hat */
+        bar = (uint16_t)(((uint32_t)h->count[i] * ADC_HIST_BAR_MAX + peak - 1u) / peak);
+
+        cyan();
+        for (j = 0u; j < bar; j++){
+            sendc('#');
+        }
+        standardColour();
+        linebreak(1);
+    }
+
+    system();
+    sends("min: ");
+    sendNum(h->min);
+    sends("  max: ");
+    sendNum(h->max);
+    sends("  below window: ");
+    sendNum(h->below);
+    sends("  above window: ");
+    sendNum(h->above);
+    linebreak(1);
+}
+
+/* Histogramm aufnehmen und als Balkendiagramm ausgeben.
+   Die Ausgabe beginnt erst nach der letzten Umsetzung, damit die
+   serielle Ausgabe nicht in die Messung fällt */
+static void adcHist(void){
+    static adcHist_t h;                   /* nicht auf dem Stack */
+
     /* Bit UCBUSY: warten, bis die letzten Zeichen gesendet sind */
     while (UCA1STAT & UCBUSY){
     }
 
     adcHistogram(&h);
-
-    for (i = 0u; i < ADC_HIST_BINS; i++){
-        if (h.count[i] != 0u){
-            if (first == ADC_HIST_BINS) first = i;
-            last = i;
-            if (h.count[i] > peak) peak = h.count[i];
-        }
-    }
 
     system();
     sends("ADC histogram, samples: ");
@@ -587,34 +626,57 @@ static void adcHist(void){
     standardColour();
     linebreak(1);
 
-    /* Nur von der ersten bis zur letzten belegten Klasse. Liegen alle
-       Ergebnisse außerhalb des Fensters, ist first > last und die
-       Schleife läuft nicht (peak = 0 wird dann nicht als Teiler benutzt) */
-    for (i = first; i <= last; i++){
-        sendNumPad((unsigned int)(h.low + i), 4u);
-        sends(" |");
-        sendNumPad(h.count[i], 5u);
-        sendc(' ');
+    histPrint(&h);
+}
 
-        /* aufgerundet, damit jede belegte Klasse mindestens ein Zeichen hat */
-        bar = (uint16_t)(((uint32_t)h.count[i] * ADC_HIST_BAR_MAX + peak - 1u) / peak);
+/* Abtastrate der Blockmessung wählen */
+static void adcLpRate(unsigned int wert){
+    if (!adcBlockRateSet((uint16_t)wert)){
+        system();
+        sends("invalid argument for: ");
+        red();
+        sends("adclprate_");
+        linebreak(1);
+        return;
+    }
+    system();
+    sends("lowpass block rate set to: ");
+    cyan();
+    sendNumL(adcBlockRateHz());
+    sends(" Hz");
+    standardColour();
+    linebreak(1);
+}
 
-        cyan();
-        for (j = 0u; j < bar; j++){
-            sendc('#');
-        }
+/* Blöcke aufnehmen, Tiefpass über jeden Block, Histogramm der gefilterten Werte.
+   Ausgabe erst nach dem letzten Block */
+static void adcLpHist(void){
+    static adcHist_t h;                   /* nicht auf dem Stack */
+
+    /* Bit UCBUSY: warten, bis die letzten Zeichen gesendet sind */
+    while (UCA1STAT & UCBUSY){
+    }
+
+    if (!adcBlockLowpassHistogram(&h)){
+        system();
+        red();
+        sends("ADC block capture failed (timeout)");
         standardColour();
         linebreak(1);
+        return;
     }
 
     system();
-    sends("min: ");
-    sendNum(h.min);
-    sends("  max: ");
-    sendNum(h.max);
-    sends("  below window: ");
-    sendNum(h.below);
-    sends("  above window: ");
-    sendNum(h.above);
+    sends("ADC lowpass block histogram, rate: ");
+    cyan();
+    sendNumL(adcBlockRateHz());
+    sends(" Hz");
+    standardColour();
+    sends(", samples: ");
+    cyan();
+    sendNumL(ADC_LP_HIST_SAMPLES);
+    standardColour();
     linebreak(1);
+
+    histPrint(&h);
 }
