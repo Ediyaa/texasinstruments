@@ -2,6 +2,7 @@
 
 #include "include/adc.h"
 #include "include/adc2.h"
+#include "include/ports.h"
 #include "include/timer.h"
 #include <src/include/console.h>
 #include <src/include/uart.h>
@@ -22,6 +23,7 @@ void watchdogInit(void){
 int main(void)
 {
     watchdogInit();
+    portsInit();
     uartInit();    
     consoleUartInit();
 

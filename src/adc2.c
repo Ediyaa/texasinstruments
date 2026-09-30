@@ -18,7 +18,7 @@ void adc2Init(void){
                | ADC12SHS_0                     /* Start durch ADC12SC          */
                | ADC12SHP                       /* Abtastdauer vom Sample Timer */
                | ADC12DIV_0                     /* Teiler 1                     */
-               | ADC12SSEL_0                    /* MODCLK                       */
+               | ADC12SSEL_3                    /* MODCLK ACLK MCLK SMCLK       */
                | ADC12CONSEQ_0;                 /* Einzelkanal, Einzelwandlung  */
 
     ADC12CTL2  = ADC12RES_2;                    /* 12 Bit, ADC12PDIV = 0 -> Vorteiler 1 */
