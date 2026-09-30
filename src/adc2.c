@@ -11,19 +11,24 @@ void adc2Init(void){
 
     ADC12CTL0 &= ~ADC12ENC;                     /* Konfiguration nur bei ENC = 0 */
 
+    /* Interne Referenz: Bit REFMSTR -> REF-Modul steuert die Referenz,
+       Bitfeld REFVSELx -> Spannung, Bit REFON -> Referenz ein */
+    REFCTL0 = REFMSTR | ADC2_REFVSEL | REFON;
+    __delay_cycles(ADC2_REF_SETTLE_CYCLES);     /* Einschwingen abwarten        */
+
     ADC12CTL0  = ADC12SHT0_12                   /* 1024 Takte für ADC12MEM0     */
                | ADC12ON;                       /* ADC ein                      */
 
     ADC12CTL1  = ADC12CSTARTADD_0               /* Ergebnis in ADC12MEM0        */
                | ADC12SHS_0                     /* Start durch ADC12SC          */
                | ADC12SHP                       /* Abtastdauer vom Sample Timer */
-               | ADC12DIV_0                     /* Teiler 1                     */
+               | ADC12DIV_1                     /* Teiler 2: f_ADC12CLK <= 2,7 MHz bei interner Referenz */
                | ADC12SSEL_3                    /* MODCLK ACLK MCLK SMCLK       */
                | ADC12CONSEQ_0;                 /* Einzelkanal, Einzelwandlung  */
 
     ADC12CTL2  = ADC12RES_2;                    /* 12 Bit, ADC12PDIV = 0 -> Vorteiler 1 */
 
-    ADC12MCTL0 = ADC12SREF_0                    /* V_R+ = AV_CC, V_R- = AV_SS   */
+    ADC12MCTL0 = ADC12SREF_1                    /* V_R+ = VREF+ (intern), V_R- = AV_SS */
                | ADC12INCH_11;                   /* Kanal A11             */
 
     ADC12CTL0 |= ADC12ENC;                      /* freigeben, zuletzt           */

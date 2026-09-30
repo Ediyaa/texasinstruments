@@ -3,6 +3,16 @@
 
 #include <stdint.h>
 
+/* ---------- Referenz ---------- */
+
+/* Interne Referenz für V_R+ (Bitfeld REFVSELx):
+   REFVSEL_0 = 1,5 V, REFVSEL_1 = 2,0 V, REFVSEL_2 = 2,5 V */
+#define ADC2_REFVSEL            REFVSEL_2
+
+/* Wartezeit nach Bit REFON in MCLK-Takten.
+   t_SETTLE höchstens 75 us (SLAS590P, Tabelle 8.41) -> 400 Takte reichen bis MCLK = 5,3 MHz */
+#define ADC2_REF_SETTLE_CYCLES  400u
+
 /* ---------- Histogramm ---------- */
 
 /* Anzahl der Umsetzungen, die ausgezählt werden */
