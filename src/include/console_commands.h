@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* adchist: Länge des längsten Balkens in Zeichen */
+#define ADC_HIST_BAR_MAX  40u
+
 void commands(char *eingabe);
 
 void listCommands(void);

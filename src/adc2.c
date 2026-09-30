@@ -48,3 +48,44 @@ uint16_t adc2Read(void){
     }
     return ADC12MEM0;                       /* Lesen löscht ADC12IFG0 */
 }
+
+/* ---------- Histogramm ---------- */
+
+void adc2Histogram(adc2Hist_t *h){
+    uint16_t i;
+    uint16_t n;
+
+    /* Konfiguration aus adc2Init wiederherstellen: adcmean und adclowpass (adc.c)
+       stellen Bitfeld ADC12SHSx auf TB0.1 um, dann startet Bit ADC12SC keine
+       Umsetzung und adc2Read() kehrt nicht zurück */
+    adc2Init();
+
+    /* Vorlaufumsetzung: legt das Fenster fest, wird nicht gezählt */
+    n = adc2Read();
+
+    h->low   = (n > ADC2_HIST_HALF) ? (uint16_t)(n - ADC2_HIST_HALF) : 0u;
+    h->min   = 0xFFFFu;
+    h->max   = 0u;
+    h->below = 0u;
+    h->above = 0u;
+    for (i = 0u; i < ADC2_HIST_BINS; i++){
+        h->count[i] = 0u;
+    }
+
+    for (i = 0u; i < ADC2_HIST_SAMPLES; i++){
+        n = adc2Read();
+
+        if (n < h->min) h->min = n;
+        if (n > h->max) h->max = n;
+
+        if (n < h->low){
+            h->below++;
+        }
+        else if (n > (uint16_t)(h->low + ADC2_HIST_BINS - 1u)){
+            h->above++;
+        }
+        else {
+            h->count[n - h->low]++;
+        }
+    }
+}
