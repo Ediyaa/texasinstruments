@@ -1,7 +1,7 @@
 #include <msp430.h>
 
 #include "include/adc.h"
-
+#include "include/adc2.h"
 #include "include/timer.h"
 #include <src/include/console.h>
 #include <src/include/uart.h>
@@ -22,14 +22,18 @@ void watchdogInit(void){
 int main(void)
 {
     watchdogInit();
-    uartInit();
-//    uartinterruptInit();
+    uartInit();    
     consoleUartInit();
-    ledInit();
-    timerInitA0();
-    timerInitA2();
-    adcInit();
-//    while(1){
+
+    adc2Init();
+    
+//    uartinterruptInit();
+
+//     ledInit();
+//     timerInitA0();
+//     // timerInitA2();
+//     adcInit();
+//   while(1){
 //        led_switch();
 //    }
     uint16_t adcValue;

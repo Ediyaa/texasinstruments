@@ -7,6 +7,7 @@
 #include "include/timer.h"
 #include "include/clk.h"
 #include "include/adc.h"
+#include "include/adc2.h"
 #include "string.h"
 #include <stdbool.h>
 
@@ -45,6 +46,7 @@ static void adcStream(void);
 static void adcUnit(unsigned int wert);
 static void adcMean(void);
 static void adcLowpass(void);
+static void readADC(void);
 
 volatile bool adcstreamflag = false;
 
@@ -105,6 +107,12 @@ static const command_t adc_cmds[] = {
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
 
+static const command_t misc_cmds[] = {
+    { "read",   readADC,   NULL, NULL, NULL, NULL },
+//    { "stop",   readADCOff,  NULL, NULL, NULL, NULL },
+    { NULL,        NULL,      NULL, NULL, NULL, NULL }
+};
+
 static const commandGroup_t groups[] = {
     { "General Options",     general_cmds     },
     { "LED Options Static",  led_static_cmds  },
@@ -112,8 +120,18 @@ static const commandGroup_t groups[] = {
     { "Timer Options",       timer_cmds       },
     { "Clock Options",       clock_cmds       },
     { "ADC Options",         adc_cmds         },
+    { "Misc Options",        misc_cmds         },
     { NULL,                  NULL             }
 };
+
+static void readADC(void){
+    system();
+    sends("ADC: ");
+    cyan();
+    adcPrint(adc2Read());
+    standardColour();
+    linebreak(1);
+}
 
 ////////////////////////////////////////////////////////////////////////
 
