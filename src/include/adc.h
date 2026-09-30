@@ -16,16 +16,42 @@
 #define ADC_TIMER_PERIOD \
     (((ADC_TIMER_CLK_HZ + ADC_SAMPLE_RATE_HZ / 2UL) / ADC_SAMPLE_RATE_HZ) - 1UL)
 
-/* Analoge Versorgung AV_CC = V_R+ in mV (ratiometrisch, V_R- = AV_SS = 0 V).
-   Nennwert des LaunchPads; geht nur in die Spannung ein, nicht in den Widerstand */
-#define ADC_AVCC_MV          3300UL
+/* ---------- Referenz ---------- */
+
+/* Interne Referenz für V_R+ (Bitfeld REFVSELx):
+   REFVSEL_0 = 1,5 V, REFVSEL_1 = 2,0 V, REFVSEL_2 = 2,5 V */
+#define ADC_REFVSEL          REFVSEL_2
+
+/* V_R+ in mV, Nennwert passend zu ADC_REFVSEL (SLAS590P, Tabelle 8.41) */
+#define ADC_VREF_MV          2500UL
+
+/* Wartezeit nach Bit REFON in MCLK-Takten.
+   t_SETTLE höchstens 75 us (SLAS590P, Tabelle 8.41) -> 400 Takte reichen bis MCLK = 5,3 MHz */
+#define ADC_REF_SETTLE_CYCLES 400u
+
+/* Versorgung des Spannungsteilers in mV (3V3 des LaunchPads, Nennwert).
+   Geht in den Widerstand ein, weil V_R+ nicht die Versorgung des Teilers ist */
+#define ADC_VCC_MV           3300UL
+
+/* ---------- Takt und Abtastzeit (Normalbetrieb und Histogramm) ---------- */
+
+/* Bitfeld ADC12SSELx: Taktquelle ADC12OSC */
+#define ADC_SSEL             ADC12SSEL_0
+
+/* Bitfeld ADC12DIVx: Teiler 2. Mit interner Referenz und Bit REFOUT = 0 ist
+   f_ADC12CLK bis 2,7 MHz spezifiziert, "ensured when using the ADC12OSC
+   divided by 2" (SLAS590P, Tabelle 8.36, Fußnote 3) */
+#define ADC_DIV              ADC12DIV_1
+
+/* Bitfeld ADC12SHT0x: Abtastzeit 1024 Takte ADC12CLK */
+#define ADC_SHT0             ADC12SHT0_12
 
 /* Festwiderstand R_1 des Spannungsteilers in Ohm */
 #define ADC_R1_OHM           1000UL
 
 /* Lage von R_T im Spannungsteiler:
-   1 -> AV_CC - R_1 - Mittelknoten - R_T - AV_SS  (R_T unten)
-   0 -> AV_CC - R_T - Mittelknoten - R_1 - AV_SS  (R_T oben) */
+   1 -> V_CC - R_1 - Mittelknoten - R_T - GND  (R_T unten)
+   0 -> V_CC - R_T - Mittelknoten - R_1 - GND  (R_T oben) */
 #define ADC_RT_LOW_SIDE      0
 
 /* Rückgabewert von adcToOhm, wenn R_T unendlich wäre (Division durch 0) */
@@ -59,9 +85,22 @@
    Einschwingen: Zeitkonstante 2^K Werte, K <= 8 ist bei 2048 Werten eingeschwungen */
 #define ADC_LP_SHIFT         6u
 
+/* ---------- Histogramm ---------- */
+
+/* Anzahl der Umsetzungen, die ausgezählt werden (höchstens 65535) */
+#define ADC_HIST_SAMPLES     1024u
+
+/* Halbe Fensterbreite in Stufen: das Fenster reicht vom Ergebnis der
+   Vorlaufumsetzung minus ADC_HIST_HALF bis plus ADC_HIST_HALF */
+#define ADC_HIST_HALF        16u
+
+/* Anzahl der Klassen im Fenster */
+#define ADC_HIST_BINS        (2u * ADC_HIST_HALF + 1u)
+
 /* ---------- Schnittstelle ---------- */
 
-/* Konfiguriert P6.0, ADC12_A und Timer TB0 und startet die Abtastung */
+/* Konfiguriert P6.0, die interne Referenz, ADC12_A und Timer TB0
+   und startet die Abtastung */
 void adcInit(void);
 
 /* Liefert true und den neuesten Wert N (0 ... 4095), falls seit dem
@@ -88,5 +127,20 @@ bool adcBlockCapture(void);
 /* Auswertung des zuletzt aufgenommenen Blocks, Ergebnis N (0 ... 4095) */
 uint16_t adcBlockMean(void);      /* Mittelwert                  */
 uint16_t adcBlockLowpass(void);   /* Tiefpass, letzter Ausgangswert */
+
+/* Ergebnis von adcHistogram */
+typedef struct {
+    uint16_t low;                    /* Ergebnis N, das zu count[0] gehört          */
+    uint16_t min;                    /* kleinstes Ergebnis                           */
+    uint16_t max;                    /* größtes Ergebnis                             */
+    uint16_t below;                  /* Anzahl Ergebnisse unterhalb des Fensters     */
+    uint16_t above;                  /* Anzahl Ergebnisse oberhalb des Fensters      */
+    uint16_t count[ADC_HIST_BINS];   /* count[i] = Anzahl Ergebnisse mit N = low + i */
+} adcHist_t;
+
+/* Eine Vorlaufumsetzung legt das Fenster fest, danach werden ADC_HIST_SAMPLES
+   Umsetzungen ausgezählt. Blockiert bis zur letzten Umsetzung, gibt nichts aus.
+   Danach läuft wieder der Normalbetrieb mit TB0 */
+void adcHistogram(adcHist_t *h);
 
 #endif /* SRC_INCLUDE_ADC_H_ */

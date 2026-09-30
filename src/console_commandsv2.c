@@ -7,7 +7,6 @@
 #include "include/timer.h"
 #include "include/clk.h"
 #include "include/adc.h"
-#include "include/adc2.h"
 #include "string.h"
 #include <stdbool.h>
 
@@ -46,7 +45,6 @@ static void adcStream(void);
 static void adcUnit(unsigned int wert);
 static void adcMean(void);
 static void adcLowpass(void);
-static void readADC(void);
 static void adcHist(void);
 
 volatile bool adcstreamflag = false;
@@ -110,7 +108,6 @@ static const command_t adc_cmds[] = {
 };
 
 static const command_t misc_cmds[] = {
-    { "read",   readADC,   NULL, NULL, NULL, NULL },
 //    { "stop",   readADCOff,  NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
@@ -125,15 +122,6 @@ static const commandGroup_t groups[] = {
     { "Misc Options",        misc_cmds         },
     { NULL,                  NULL             }
 };
-
-static void readADC(void){
-    system();
-    sends("ADC: ");
-    cyan();
-    adcPrint(adc2Read());
-    standardColour();
-    linebreak(1);
-}
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -584,10 +572,10 @@ static void sendNumPad(unsigned int n, unsigned int w){
    Die Ausgabe beginnt erst nach der letzten Umsetzung, damit die
    serielle Ausgabe nicht in die Messung fällt */
 static void adcHist(void){
-    static adc2Hist_t h;                  /* nicht auf dem Stack */
+    static adcHist_t h;                   /* nicht auf dem Stack */
     uint16_t i;
     uint16_t j;
-    uint16_t first = ADC2_HIST_BINS;      /* erste belegte Klasse    */
+    uint16_t first = ADC_HIST_BINS;      /* erste belegte Klasse    */
     uint16_t last  = 0u;                  /* letzte belegte Klasse   */
     uint16_t peak  = 0u;                  /* größte Anzahl je Klasse */
     uint16_t bar;
@@ -596,11 +584,11 @@ static void adcHist(void){
     while (UCA1STAT & UCBUSY){
     }
 
-    adc2Histogram(&h);
+    adcHistogram(&h);
 
-    for (i = 0u; i < ADC2_HIST_BINS; i++){
+    for (i = 0u; i < ADC_HIST_BINS; i++){
         if (h.count[i] != 0u){
-            if (first == ADC2_HIST_BINS) first = i;
+            if (first == ADC_HIST_BINS) first = i;
             last = i;
             if (h.count[i] > peak) peak = h.count[i];
         }
@@ -609,7 +597,7 @@ static void adcHist(void){
     system();
     sends("ADC histogram, samples: ");
     cyan();
-    sendNum(ADC2_HIST_SAMPLES);
+    sendNum(ADC_HIST_SAMPLES);
     standardColour();
     linebreak(1);
 

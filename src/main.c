@@ -1,7 +1,6 @@
 #include <msp430.h>
 
 #include "include/adc.h"
-#include "include/adc2.h"
 #include "include/ports.h"
 #include "include/timer.h"
 #include <src/include/console.h>
@@ -27,14 +26,13 @@ int main(void)
     uartInit();    
     consoleUartInit();
 
-    adc2Init();
     
-//    uartinterruptInit();
+    uartinterruptInit();
 
-//     ledInit();
-//     timerInitA0();
+    ledInit();
+    timerInitA0();
 //     // timerInitA2();
-//     adcInit();
+    adcInit();
 //   while(1){
 //        led_switch();
 //    }

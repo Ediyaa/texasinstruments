@@ -31,6 +31,15 @@ static void adc_stop(void)
     ADC12IFG = 0;
 }
 
+/* Interne Referenz einschalten und Einschwingen abwarten.
+   Bit REFMSTR -> REF-Modul steuert die Referenz, Bitfeld REFVSELx -> Spannung,
+   Bit REFON -> Referenz ein, Bit REFOUT = 0 -> nur intern, nicht an P5.0 */
+static void adc_ref_on(void)
+{
+    REFCTL0 = REFMSTR | ADC_REFVSEL | REFON;
+    __delay_cycles(ADC_REF_SETTLE_CYCLES);
+}
+
 /* ADC12_A für Einzelwerte konfigurieren, Start durch TB0.1 (Normalbetrieb) */
 static void adc_config_periodic(void)
 {
@@ -38,29 +47,29 @@ static void adc_config_periodic(void)
     adc_stop();
 
     /* ADC12CTL0:
-       Bitfeld ADC12SHT0x = 0001 -> Abtastzeit 8 Takte ADC12CLK
-       Bit ADC12ON        = 1    -> ADC einschalten
-       Bit ADC12MSC       = 0    -> jede Umsetzung braucht eine eigene Flanke */
-    ADC12CTL0 = ADC12SHT0_1 | ADC12ON;
+       Bitfeld ADC12SHT0x = ADC_SHT0 -> Abtastzeit (adc.h)
+       Bit ADC12ON        = 1        -> ADC einschalten
+       Bit ADC12MSC       = 0        -> jede Umsetzung braucht eine eigene Flanke */
+    ADC12CTL0 = ADC_SHT0 | ADC12ON;
 
     /* ADC12CTL1:
-       Bitfeld ADC12CSTARTADDx = 0  -> Ergebnis in ADC12MEM0
-       Bitfeld ADC12SHSx       = 11 -> Startimpuls von TB0.1
-       Bit ADC12SHP            = 1  -> Abtastzeit vom Abtast-Timer (ADC12SHT0x)
-       Bitfeld ADC12DIVx       = 0  -> Teiler 1
-       Bitfeld ADC12SSELx      = 00 -> ADC12OSC
-       Bitfeld ADC12CONSEQx    = 10 -> Einzelkanal wiederholt */
+       Bitfeld ADC12CSTARTADDx = 0        -> Ergebnis in ADC12MEM0
+       Bitfeld ADC12SHSx       = 11       -> Startimpuls von TB0.1
+       Bit ADC12SHP            = 1        -> Abtastzeit vom Abtast-Timer (ADC12SHT0x)
+       Bitfeld ADC12DIVx       = ADC_DIV  -> Teiler (adc.h)
+       Bitfeld ADC12SSELx      = ADC_SSEL -> Taktquelle (adc.h)
+       Bitfeld ADC12CONSEQx    = 10       -> Einzelkanal wiederholt */
     ADC12CTL1 = ADC12CSTARTADD_0 | ADC12SHS_3 | ADC12SHP |
-                ADC12DIV_0 | ADC12SSEL_0 | ADC12CONSEQ_2;
+                ADC_DIV | ADC_SSEL | ADC12CONSEQ_2;
 
     /* ADC12CTL2:
        Bitfeld ADC12RESx = 10 -> 12 Bit */
     ADC12CTL2 = ADC12RES_2;
 
     /* ADC12MCTL0:
-       Bitfeld ADC12SREFx = 000  -> V_R+ = AV_CC, V_R- = AV_SS (ratiometrisch)
+       Bitfeld ADC12SREFx = 001  -> V_R+ = VREF+ (intern), V_R- = AV_SS
        Bitfeld ADC12INCHx = 0000 -> Kanal A0 (P6.0) */
-    ADC12MCTL0 = ADC12SREF_0 | ADC12INCH_11;
+    ADC12MCTL0 = ADC12SREF_1 | ADC12INCH_0;
 
     /* Interrupt bei fertigem Ergebnis in ADC12MEM0 */
     ADC12IFG = 0;
@@ -70,11 +79,46 @@ static void adc_config_periodic(void)
     ADC12CTL0 |= ADC12ENC;
 }
 
+/* ADC12_A für Einzelumsetzungen per Software konfigurieren (Histogramm).
+   Takt, Abtastzeit, Referenz und Kanal wie im Normalbetrieb */
+static void adc_config_single(void)
+{
+    adc_stop();
+
+    ADC12CTL0 = ADC_SHT0 | ADC12ON;
+
+    /* ADC12CTL1: wie im Normalbetrieb, aber
+       Bitfeld ADC12SHSx    = 00 -> Start durch Bit ADC12SC
+       Bitfeld ADC12CONSEQx = 00 -> Einzelkanal, Einzelumsetzung */
+    ADC12CTL1 = ADC12CSTARTADD_0 | ADC12SHS_0 | ADC12SHP |
+                ADC_DIV | ADC_SSEL | ADC12CONSEQ_0;
+
+    ADC12CTL2  = ADC12RES_2;
+    ADC12MCTL0 = ADC12SREF_1 | ADC12INCH_0;
+
+    ADC12IFG = 0;
+    ADC12CTL0 |= ADC12ENC;
+}
+
+/* Eine Umsetzung per Bit ADC12SC starten und das Ergebnis abwarten.
+   Setzt ADC12IE0 = 0 voraus, sonst holt die Interruptroutine das
+   Ergebnis ab und die Schleife endet nie */
+static uint16_t adc_read_single(void)
+{
+    ADC12CTL0 |= ADC12SC;
+    while (!(ADC12IFG & ADC12IFG0)) {
+    }
+    return ADC12MEM0;                 /* Lesen löscht ADC12IFG0 */
+}
+
 void adcInit(void)
 {
     /* P6.0 als analoger Eingang A0 */
     P6SEL |= BIT0;
     P6DIR &= ~BIT0;
+
+    /* interne Referenz vor dem ersten Einschalten des ADC */
+    adc_ref_on();
 
     adc_config_periodic();
 
@@ -114,33 +158,41 @@ uint16_t adcLast(void)
 
 /* ---------- Übersetzung ---------- */
 
-/* V_in = N * AV_CC / 4095, kaufmännisch gerundet */
+/* V_in = N * V_R+ / 4095 (SLAU208Q, 28.2.1), kaufmännisch gerundet */
 uint16_t adcToMillivolt(uint16_t n)
 {
-    return (uint16_t)(((uint32_t)n * ADC_AVCC_MV + 4095UL / 2UL) / 4095UL);
+    return (uint16_t)(((uint32_t)n * ADC_VREF_MV + 4095UL / 2UL) / 4095UL);
 }
 
-/* R_T unten: R_T = R_1 * N / (4095 - N)
-   R_T oben:  R_T = R_1 * (4095 - N) / N
-   AV_CC kürzt sich heraus, kaufmännisch gerundet */
+/* Teiler an V_CC, gemessen gegen V_R+:  V_in = N * V_R+ / 4095
+   R_T unten: R_T = R_1 * N * V_R+ / (4095 * V_CC - N * V_R+)
+   R_T oben:  R_T = R_1 * (4095 * V_CC - N * V_R+) / (N * V_R+)
+   V_CC = ADC_VCC_MV (Nennwert), V_R+ = ADC_VREF_MV, kaufmännisch gerundet.
+   64 Bit, weil R_1 * 4095 * V_CC über 32 Bit hinausgeht */
 uint32_t adcToOhm(uint16_t n)
 {
-    uint32_t zaehler;
-    uint32_t nenner;
+    uint64_t u_in  = (uint64_t)n * ADC_VREF_MV;     /* 4095 * V_in in mV */
+    uint64_t u_ges = 4095ULL * ADC_VCC_MV;           /* 4095 * V_CC in mV */
+    uint64_t zaehler;
+    uint64_t nenner;
+
+    if (u_in >= u_ges) {
+        return ADC_OHM_INVALID;                      /* V_in >= V_CC */
+    }
 
 #if ADC_RT_LOW_SIDE
-    zaehler = ADC_R1_OHM * (uint32_t)n;
-    nenner  = 4095UL - (uint32_t)n;
+    zaehler = (uint64_t)ADC_R1_OHM * u_in;
+    nenner  = u_ges - u_in;
 #else
-    zaehler = ADC_R1_OHM * (4095UL - (uint32_t)n);
-    nenner  = (uint32_t)n;
+    zaehler = (uint64_t)ADC_R1_OHM * (u_ges - u_in);
+    nenner  = u_in;
 #endif
 
-    if (nenner == 0UL) {
+    if (nenner == 0ULL) {
         return ADC_OHM_INVALID;
     }
 
-    return (zaehler + nenner / 2UL) / nenner;
+    return (uint32_t)((zaehler + nenner / 2ULL) / nenner);
 }
 
 /* Steinhart-Hart: 1/T = A + B * ln(R_T) + C * (ln(R_T))^3,
@@ -260,6 +312,57 @@ uint16_t adcBlockLowpass(void)
     }
 
     return (uint16_t)((y + (1UL << (ADC_LP_SHIFT - 1u))) >> ADC_LP_SHIFT);
+}
+
+/* ---------- Histogramm ---------- */
+
+/* Eine Vorlaufumsetzung legt das Fenster fest, danach werden ADC_HIST_SAMPLES
+   Einzelumsetzungen per Software ausgezählt. Der Normalbetrieb (TB0.1) ruht
+   so lange und läuft danach wieder */
+void adcHistogram(adcHist_t *h)
+{
+    uint16_t ie = ADC12IE;
+    uint16_t i;
+    uint16_t n;
+
+    /* Die Interruptroutine darf ADC12IFG0 nicht abholen,
+       sonst endet adc_read_single() nie */
+    ADC12IE = 0;
+
+    adc_config_single();
+
+    /* Vorlaufumsetzung: legt das Fenster fest, wird nicht gezählt */
+    n = adc_read_single();
+
+    h->low   = (n > ADC_HIST_HALF) ? (uint16_t)(n - ADC_HIST_HALF) : 0u;
+    h->min   = 0xFFFFu;
+    h->max   = 0u;
+    h->below = 0u;
+    h->above = 0u;
+    for (i = 0u; i < ADC_HIST_BINS; i++) {
+        h->count[i] = 0u;
+    }
+
+    for (i = 0u; i < ADC_HIST_SAMPLES; i++) {
+        n = adc_read_single();
+
+        if (n < h->min) h->min = n;
+        if (n > h->max) h->max = n;
+
+        if (n < h->low) {
+            h->below++;
+        }
+        else if (n > (uint16_t)(h->low + ADC_HIST_BINS - 1u)) {
+            h->above++;
+        }
+        else {
+            h->count[n - h->low]++;
+        }
+    }
+
+    /* Normalbetrieb wiederherstellen */
+    adc_config_periodic();
+    ADC12IE = ie;
 }
 
 /* ---------- Interruptroutine ---------- */
