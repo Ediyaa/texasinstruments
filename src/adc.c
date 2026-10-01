@@ -10,6 +10,9 @@ static volatile uint16_t s_value;      /* letzter Wert aus ADC12MEM0 */
 static uint16_t s_vref_x10 = (uint16_t)(ADC_VREF_MV * 10UL);   /* V_R+ in 0,1 mV                      */
 static uint16_t s_vsrc_x10 = (uint16_t)(ADC_VCC_MV * 10UL);    /* Spannung der Signalquelle in 0,1 mV */
 static uint16_t s_r1_ohm  = (uint16_t)ADC_R1_OHM;    /* Festwiderstand R_1 in Ohm       */
+static int16_t  s_offset_x100 = (int16_t)ADC_OFFSET_X100;   /* Offset o in 0,01 Stufen */
+
+static uint64_t adc_pow10(uint16_t d);               /* weiter unten definiert */
 static volatile bool     s_new_value;  /* true, wenn noch nicht abgeholt */
 
 /* Messblock für adcBlockCapture. NOINIT: die 4 KB werden beim Start nicht genullt */
@@ -236,42 +239,32 @@ uint16_t adcLast(void)
 
 /* ---------- Übersetzung ---------- */
 
-/* V_in = N * V_R+ / 4095 (SLAU208Q, 28.2.1), kaufmännisch gerundet */
+/* V_in = (N - o) * V_R+ / 4095 (SLAU208Q, 28.2.1), kaufmännisch gerundet auf mV.
+   Rechnet über adcFixedToMillivolt, damit der Offset o gleich behandelt wird */
 uint16_t adcToMillivolt(uint16_t n)
 {
-    return (uint16_t)(((uint32_t)n * s_vref_x10 + 40950UL / 2UL) / 40950UL);   /* V_R+ in 0,1 mV */
+    uint64_t scale = adc_pow10(ADC_MEAN_DEC);
+    uint64_t u     = adcFixedToMillivolt((uint32_t)((uint64_t)n * scale));
+
+    return (uint16_t)((u + scale / 2ULL) / scale);
 }
 
-/* Teiler an V_CC, gemessen gegen V_R+:  V_in = N * V_R+ / 4095
-   R_T unten: R_T = R_1 * N * V_R+ / (4095 * V_CC - N * V_R+)
-   R_T oben:  R_T = R_1 * (4095 * V_CC - N * V_R+) / (N * V_R+)
-   V_CC = s_vsrc_x10, V_R+ = s_vref_x10 (beide in 0,1 mV, die Einheit kürzt sich),
-   R_1 = s_r1_ohm, kaufmännisch gerundet.
-   64 Bit, weil R_1 * 4095 * V_CC über 32 Bit hinausgeht */
+/* R_T aus N, kaufmännisch gerundet auf Ohm. Rechnet über adcFixedToOhm
+   (Offset o, Formeln und Wertebereich siehe dort). ADC_OHM_INVALID, wenn R_T
+   nicht bestimmbar ist oder nicht in 32 Bit passt */
 uint32_t adcToOhm(uint16_t n)
 {
-    uint64_t u_in  = (uint64_t)n * s_vref_x10;      /* 4095 * V_in in 0,1 mV */
-    uint64_t u_ges = 4095ULL * s_vsrc_x10;           /* 4095 * V_CC in 0,1 mV */
-    uint64_t zaehler;
-    uint64_t nenner;
+    uint64_t scale = adc_pow10(ADC_MEAN_DEC);
+    uint64_t rs    = adc_pow10(ADC_OHM_DEC);
+    uint64_t rq;
+    uint64_t r;
 
-    if (u_in >= u_ges) {
-        return ADC_OHM_INVALID;                      /* V_in >= V_CC */
-    }
-
-#if ADC_RT_LOW_SIDE
-    zaehler = (uint64_t)s_r1_ohm * u_in;
-    nenner  = u_ges - u_in;
-#else
-    zaehler = (uint64_t)s_r1_ohm * (u_ges - u_in);
-    nenner  = u_in;
-#endif
-
-    if (nenner == 0ULL) {
+    if (!adcFixedToOhm((uint32_t)((uint64_t)n * scale), &rq)) {
         return ADC_OHM_INVALID;
     }
 
-    return (uint32_t)((zaehler + nenner / 2ULL) / nenner);
+    r = (rq + rs / 2ULL) / rs;
+    return (r >= (uint64_t)ADC_OHM_INVALID) ? ADC_OHM_INVALID : (uint32_t)r;
 }
 
 /* ---------- Umrechnungsparameter ---------- */
@@ -318,6 +311,16 @@ uint16_t adcR1Get(void)
     return s_r1_ohm;
 }
 
+void adcOffsetSet(int16_t o_x100)
+{
+    s_offset_x100 = o_x100;
+}
+
+int16_t adcOffsetGet(void)
+{
+    return s_offset_x100;
+}
+
 /* ---------- Umrechnung mit Nachkommastellen (Mittelwerte) ---------- */
 
 /* 10^d */
@@ -339,18 +342,33 @@ uint32_t adcMeanFixed(uint32_t sum, uint32_t n)
     return (uint32_t)(((uint64_t)sum * adc_pow10(ADC_MEAN_DEC) + n / 2UL) / n);
 }
 
-/* U = N * V_R+ / 4095, N und U jeweils mit 10^ADC_MEAN_DEC skaliert,
+/* Festkomma-N um den Offset korrigieren: N - o, nicht unter 0.
+   o liegt in 0,01 Stufen vor, N in 10^ADC_MEAN_DEC -> o mit 10^(ADC_MEAN_DEC - 2)
+   hochskalieren (ADC_MEAN_DEC >= 2) */
+static uint32_t adc_fixed_corr(uint32_t nq)
+{
+    int64_t v = (int64_t)nq
+              - (int64_t)s_offset_x100 * (int64_t)adc_pow10(ADC_MEAN_DEC - 2u);
+
+    return (v > 0) ? (uint32_t)v : 0UL;
+}
+
+/* U = (N - o) * V_R+ / 4095, N und U jeweils mit 10^ADC_MEAN_DEC skaliert,
    V_R+ in 0,1 mV -> durch 4095 * 10 teilen */
 uint64_t adcFixedToMillivolt(uint32_t nq)
 {
+    nq = adc_fixed_corr(nq);
     return ((uint64_t)nq * s_vref_x10 + 40950ULL / 2ULL) / 40950ULL;
 }
 
-/* Wie adcToOhm, aber N mit 10^ADC_MEAN_DEC skaliert, Ergebnis in Ohm * 10^ADC_OHM_DEC.
+/* R_T aus (N - o), N mit 10^ADC_MEAN_DEC skaliert, Ergebnis in Ohm * 10^ADC_OHM_DEC.
+   R_T oben:  R_T = R_1 * (4095 * V_CC - N * V_R+) / (N * V_R+)
+   R_T unten: R_T = R_1 * N * V_R+ / (4095 * V_CC - N * V_R+)
+   V_CC, V_R+ in 0,1 mV (die Einheit kürzt sich).
    Größter Zähler: 65535 * 4095 * 65535 * 10^4 * 10^2 = 1,76e19 < 2^64 = 1,84e19 */
 bool adcFixedToOhm(uint32_t nq, uint64_t *rq)
 {
-    uint64_t u_in  = (uint64_t)nq * s_vref_x10;                        /* 4095 * V_in * 10^D, 0,1 mV */
+    uint64_t u_in  = (uint64_t)adc_fixed_corr(nq) * s_vref_x10;                        /* 4095 * V_in * 10^D, 0,1 mV */
     uint64_t u_ges = 4095ULL * s_vsrc_x10 * adc_pow10(ADC_MEAN_DEC);   /* 4095 * V_CC * 10^D, 0,1 mV */
     uint64_t zaehler;
     uint64_t nenner;

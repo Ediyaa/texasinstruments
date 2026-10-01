@@ -22,10 +22,15 @@ typedef struct {
     const char  *argHint;     /* Hilfetext bei argHandler, z.B. "<zahl>"*/
     const char  *msg1;        /* NULL = keine Ausgabe                   */
     const char  *msg2;
-    bool         tenths;      /* true = Argument mit einer Nachkomma-
-                                 stelle, argHandler bekommt Wert * 10.
-                                 Fehlt der Eintrag, ist er false        */
+    uint8_t      argFmt;      /* Format des Arguments, ARG_... unten.
+                                 Fehlt der Eintrag, ist er ARG_UINT     */
 } command_t;
+
+/* Formate für argFmt */
+#define ARG_UINT    0u   /* ganze Zahl 0 ... 65535                          */
+#define ARG_TENTHS  1u   /* eine Nachkommastelle, argHandler bekommt Wert * 10 */
+#define ARG_SHUND   2u   /* Vorzeichen, bis zwei Nachkommastellen, argHandler
+                            bekommt Wert * 100 als Zweierkomplement         */
 
 typedef struct {
     const char      *title;
@@ -55,6 +60,7 @@ static void adcLpTau(unsigned int wert);
 static void adcVref(unsigned int wert);
 static void adcVsrc(unsigned int wert);
 static void adcR1(unsigned int wert);
+static void adcOffset(unsigned int wert);
 
 volatile bool adcstreamflag = false;
 
@@ -115,8 +121,9 @@ static const command_t adc_cmds[] = {
     { "adchist",   adcHist,   NULL, NULL, NULL, NULL },
     { "adclprate_", NULL,     adcLpRate, "<INTEGER[1,3]> 1=1kHz 2=10kHz 3=100kHz", NULL, NULL },
     { "adclptau_", NULL,      adcLpTau, "<INTEGER[1,9]> tau = 2^K samples", NULL, NULL },
-    { "adcvref_",  NULL,      adcVref,  "<DECIMAL[0.1,6553.5]> V_R+ in mV, e.g. 2493.8", NULL, NULL, true },
-    { "adcvsrc_",  NULL,      adcVsrc,  "<DECIMAL[0.1,6553.5]> source voltage in mV, e.g. 3301.0", NULL, NULL, true },
+    { "adcvref_",  NULL,      adcVref,  "<DECIMAL[0.1,6553.5]> V_R+ in mV, e.g. 2493.8", NULL, NULL, ARG_TENTHS },
+    { "adcvsrc_",  NULL,      adcVsrc,  "<DECIMAL[0.1,6553.5]> source voltage in mV, e.g. 3301.0", NULL, NULL, ARG_TENTHS },
+    { "adcoffset_", NULL,     adcOffset, "<DECIMAL[-327.67,327.67]> ADC offset in LSB, e.g. -0.59", NULL, NULL, ARG_SHUND },
     { "adcr1_",    NULL,      adcR1,    "<INTEGER[1,65535]> R_1 in Ohm", NULL, NULL },
     { "adclphist", adcLpHist, NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
@@ -251,6 +258,53 @@ static bool parseTenths(const char *s, unsigned int *out){
     return true;
 }
 
+/* Zahl mit Vorzeichen und höchstens zwei Nachkommastellen einlesen,
+ * Ergebnis * 100 als Zweierkomplement: "-0.59" -> -59, "2.3" -> 230, "+1" -> 100.
+ * Liefert false bei leerer Eingabe, anderen Zeichen, mehr als zwei
+ * Nachkommastellen oder Betrag über 327,67. */
+static bool parseSignedHundredths(const char *s, unsigned int *out){
+
+    unsigned long betrag = 0UL;
+    bool negativ = false;
+    bool ziffern = false;
+    int  stellen = 0;
+
+    if (*s == '-' || *s == '+'){
+        negativ = (*s == '-');
+        s++;
+    }
+
+    for ( ; *s >= '0' && *s <= '9' ; s++){
+        betrag = betrag * 10UL + (unsigned long)(*s - '0');
+        ziffern = true;
+        if (betrag > 327UL) return false;         /* * 100 läge über 32767 */
+    }
+    if (!ziffern) return false;
+
+    betrag *= 100UL;
+
+    if (*s == '.' || *s == ','){
+        s++;
+        if (*s >= '0' && *s <= '9'){
+            betrag += 10UL * (unsigned long)(*s - '0');
+            s++;
+            stellen++;
+        }
+        if (*s >= '0' && *s <= '9'){
+            betrag += (unsigned long)(*s - '0');
+            s++;
+            stellen++;
+        }
+        if (stellen == 0) return false;
+    }
+
+    if (*s != '\0') return false;
+    if (betrag > 32767UL) return false;
+
+    *out = negativ ? (unsigned int)(-(int)betrag) : (unsigned int)betrag;
+    return true;
+}
+
 /* Ziffernfolge einlesen. Liefert false bei leerer Eingabe,
  * Nicht-Ziffern oder Ueberlauf jenseits von 65535. */
 static bool parseUInt(const char *s, unsigned int *out){
@@ -298,8 +352,17 @@ void commands(char *eingabe){
                 if (strncmp(eingabe, cmd[i].name, len) == 0){
 
                     unsigned int wert;
-                    bool ok = cmd[i].tenths ? parseTenths(&eingabe[len], &wert)
-                                            : parseUInt(&eingabe[len], &wert);
+                    bool ok;
+
+                    if (cmd[i].argFmt == ARG_TENTHS){
+                        ok = parseTenths(&eingabe[len], &wert);
+                    }
+                    else if (cmd[i].argFmt == ARG_SHUND){
+                        ok = parseSignedHundredths(&eingabe[len], &wert);
+                    }
+                    else {
+                        ok = parseUInt(&eingabe[len], &wert);
+                    }
 
                     if (ok){
                         cmd[i].argHandler(wert);
@@ -878,4 +941,22 @@ static void adcVsrc(unsigned int wert){
 /* Festwiderstand R_1 des Spannungsteilers in Ohm */
 static void adcR1(unsigned int wert){
     paramSetReply(adcR1Set((uint16_t)wert), "adcr1_", "R_1", wert, 0u, " Ohm");
+}
+
+/* Offset o des ADC in Stufen, wert = o * 100 als Zweierkomplement */
+static void adcOffset(unsigned int wert){
+    int16_t o = (int16_t)wert;
+
+    adcOffsetSet(o);
+
+    system();
+    sends("ADC offset set to: ");
+    cyan();
+    if (o < 0){
+        sendc('-');
+    }
+    sendFixed((uint64_t)((o < 0) ? -(int32_t)o : (int32_t)o), 2u);
+    sends(" LSB");
+    standardColour();
+    linebreak(1);
 }

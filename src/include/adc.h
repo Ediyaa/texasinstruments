@@ -59,6 +59,11 @@
 #define ADC_MEAN_DEC         4u
 #define ADC_OHM_DEC          2u
 
+/* Offset o des ADC in 0,01 Stufen (Startwert, mit adcoffset_ änderbar).
+   Vor jeder Umrechnung in U und R gilt N_korr = N - o (nicht unter 0).
+   Die Histogrammbalken und der Mittelwert N bleiben die Rohwerte des ADC */
+#define ADC_OFFSET_X100      0
+
 /* Lage von R_T im Spannungsteiler:
    1 -> V_CC - R_1 - Mittelknoten - R_T - GND  (R_T unten)
    0 -> V_CC - R_T - Mittelknoten - R_1 - GND  (R_T oben) */
@@ -167,6 +172,10 @@ bool     adcR1Set(uint16_t ohm);      /* Festwiderstand R_1 in Ohm          */
 uint16_t adcVrefGet(void);
 uint16_t adcVsrcGet(void);
 uint16_t adcR1Get(void);
+
+/* Offset o des ADC in 0,01 Stufen (Befehl adcoffset_), mit Vorzeichen */
+void     adcOffsetSet(int16_t o_x100);
+int16_t  adcOffsetGet(void);
 
 /* Übersetzung N -> Eingangsspannung in mV */
 uint16_t adcToMillivolt(uint16_t n);
