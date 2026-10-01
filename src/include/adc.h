@@ -193,6 +193,10 @@ typedef struct {
     uint16_t max;                    /* größtes Ergebnis                             */
     uint16_t below;                  /* Anzahl Ergebnisse unterhalb des Fensters     */
     uint16_t above;                  /* Anzahl Ergebnisse oberhalb des Fensters      */
+    uint32_t n;                      /* Anzahl aller gezählten Ergebnisse            */
+    uint32_t sum;                    /* Summe aller gezählten Ergebnisse (auch
+                                        außerhalb des Fensters) -> Mittelwert       */
+    uint32_t sum_raw;                /* Summe der zugehörigen Rohwerte vor dem Filter */
     uint16_t count[ADC_HIST_BINS];   /* count[i] = Anzahl Ergebnisse mit N = low + i */
 } adcHist_t;
 

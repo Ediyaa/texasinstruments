@@ -7,6 +7,9 @@
 /* adchist: Länge des längsten Balkens in Zeichen */
 #define ADC_HIST_BAR_MAX  40u
 
+/* adchist, adclphist: Nachkommastellen des Mittelwerts */
+#define ADC_HIST_MEAN_DEC 4u
+
 void commands(char *eingabe);
 
 void listCommands(void);

@@ -299,6 +299,9 @@ static void adc_hist_reset(adcHist_t *h, uint16_t center)
     h->max   = 0u;
     h->below = 0u;
     h->above = 0u;
+    h->n       = 0UL;
+    h->sum     = 0UL;
+    h->sum_raw = 0UL;
     for (i = 0u; i < ADC_HIST_BINS; i++) {
         h->count[i] = 0u;
     }
@@ -307,6 +310,9 @@ static void adc_hist_reset(adcHist_t *h, uint16_t center)
 /* Einen Wert n ins Histogramm zählen */
 static void adc_hist_count(adcHist_t *h, uint16_t n)
 {
+    h->n++;
+    h->sum += n;
+
     if (n < h->min) h->min = n;
     if (n > h->max) h->max = n;
 
@@ -492,6 +498,7 @@ static void adc_blk_lowpass_count(adcHist_t *h)
     for (i = 0u; i < ADC_BLOCK_LEN; i++) {
         sum += s_block[i];
     }
+    h->sum_raw += sum;
     y = ((sum << k) + ADC_BLOCK_LEN / 2UL) / ADC_BLOCK_LEN;
 
     for (i = 0u; i < ADC_BLOCK_LEN; i++) {
@@ -554,6 +561,7 @@ void adcHistogram(adcHist_t *h)
     uint16_t ie = ADC12IE;
     uint16_t i;
     uint16_t n;
+    uint16_t x;
 
     /* Die Interruptroutine darf ADC12IFG0 nicht abholen,
        sonst endet adc_read_single() nie */
@@ -569,7 +577,9 @@ void adcHistogram(adcHist_t *h)
     adc_hist_reset(h, n);
 
     for (i = 0u; i < ADC_HIST_SAMPLES; i++) {
-        adc_hist_count(h, adc_filter(&s_filt_hist, adc_read_single()));
+        x = adc_read_single();
+        h->sum_raw += x;
+        adc_hist_count(h, adc_filter(&s_filt_hist, x));
     }
 
     /* Normalbetrieb wiederherstellen, dessen Filter neu starten

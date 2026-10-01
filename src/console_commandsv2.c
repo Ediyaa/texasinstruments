@@ -548,6 +548,34 @@ static void sendNumPad(unsigned int n, unsigned int w){
     sendNum(n);
 }
 
+/* Mittelwert sum / n mit ADC_HIST_MEAN_DEC Nachkommastellen ausgeben,
+   kaufmännisch gerundet. 64 Bit, weil sum * 10^Stellen über 32 Bit hinausgeht */
+static void sendMean(uint32_t sum, uint32_t n){
+    uint64_t scale = 1ULL;
+    uint64_t q;
+    uint64_t t;
+    uint32_t frac;
+    uint16_t d;
+
+    if (n == 0UL){
+        sends("-");
+        return;
+    }
+
+    for (d = 0u; d < ADC_HIST_MEAN_DEC; d++){
+        scale *= 10ULL;
+    }
+
+    q    = ((uint64_t)sum * scale + n / 2UL) / n;
+    frac = (uint32_t)(q % scale);
+
+    sendNumL((unsigned long)(q / scale));
+    sendc('.');
+    for (t = scale / 10ULL; t > 0ULL; t /= 10ULL){   /* genau ADC_HIST_MEAN_DEC Ziffern */
+        sendc((char)('0' + (frac / (uint32_t)t) % 10u));
+    }
+}
+
 /* Balken, min, max und Werte außerhalb des Fensters ausgeben */
 static void histPrint(const adcHist_t *h){
     uint16_t i;
@@ -594,6 +622,18 @@ static void histPrint(const adcHist_t *h){
     sendNum(h->below);
     sends("  above window: ");
     sendNum(h->above);
+    linebreak(1);
+
+    /* Mittelwert aller gezählten Werte und der zugehörigen Rohwerte */
+    system();
+    sends("mean: ");
+    cyan();
+    sendMean(h->sum, h->n);
+    standardColour();
+    sends("  raw mean: ");
+    cyan();
+    sendMean(h->sum_raw, h->n);
+    standardColour();
     linebreak(1);
 }
 
