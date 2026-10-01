@@ -22,6 +22,9 @@ typedef struct {
     const char  *argHint;     /* Hilfetext bei argHandler, z.B. "<zahl>"*/
     const char  *msg1;        /* NULL = keine Ausgabe                   */
     const char  *msg2;
+    bool         tenths;      /* true = Argument mit einer Nachkomma-
+                                 stelle, argHandler bekommt Wert * 10.
+                                 Fehlt der Eintrag, ist er false        */
 } command_t;
 
 typedef struct {
@@ -112,8 +115,8 @@ static const command_t adc_cmds[] = {
     { "adchist",   adcHist,   NULL, NULL, NULL, NULL },
     { "adclprate_", NULL,     adcLpRate, "<INTEGER[1,3]> 1=1kHz 2=10kHz 3=100kHz", NULL, NULL },
     { "adclptau_", NULL,      adcLpTau, "<INTEGER[1,9]> tau = 2^K samples", NULL, NULL },
-    { "adcvref_",  NULL,      adcVref,  "<INTEGER[1,65535]> V_R+ in mV", NULL, NULL },
-    { "adcvsrc_",  NULL,      adcVsrc,  "<INTEGER[1,65535]> source voltage in mV", NULL, NULL },
+    { "adcvref_",  NULL,      adcVref,  "<DECIMAL[0.1,6553.5]> V_R+ in mV, e.g. 2493.8", NULL, NULL, true },
+    { "adcvsrc_",  NULL,      adcVsrc,  "<DECIMAL[0.1,6553.5]> source voltage in mV, e.g. 3301.0", NULL, NULL, true },
     { "adcr1_",    NULL,      adcR1,    "<INTEGER[1,65535]> R_1 in Ohm", NULL, NULL },
     { "adclphist", adcLpHist, NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
@@ -216,6 +219,38 @@ void sendNumL(unsigned long n){
     sends(&buf[i]);
 }
 
+/* Zahl mit höchstens einer Nachkommastelle einlesen, Ergebnis * 10:
+ * "2494" -> 24940, "2493.8" oder "2493,8" -> 24938.
+ * Liefert false bei leerer Eingabe, anderen Zeichen, mehr als einer
+ * Nachkommastelle oder Ergebnis über 65535 (6553,5). */
+static bool parseTenths(const char *s, unsigned int *out){
+
+    unsigned long wert = 0UL;
+    bool ziffern = false;
+
+    for ( ; *s >= '0' && *s <= '9' ; s++){
+        wert = wert * 10UL + (unsigned long)(*s - '0');
+        ziffern = true;
+        if (wert > 6553UL) return false;          /* * 10 läge über 65535 */
+    }
+    if (!ziffern) return false;
+
+    wert *= 10UL;
+
+    if (*s == '.' || *s == ','){
+        s++;
+        if (*s < '0' || *s > '9') return false;
+        wert += (unsigned long)(*s - '0');
+        s++;
+    }
+
+    if (*s != '\0') return false;
+    if (wert > 65535UL) return false;
+
+    *out = (unsigned int)wert;
+    return true;
+}
+
 /* Ziffernfolge einlesen. Liefert false bei leerer Eingabe,
  * Nicht-Ziffern oder Ueberlauf jenseits von 65535. */
 static bool parseUInt(const char *s, unsigned int *out){
@@ -263,8 +298,10 @@ void commands(char *eingabe){
                 if (strncmp(eingabe, cmd[i].name, len) == 0){
 
                     unsigned int wert;
+                    bool ok = cmd[i].tenths ? parseTenths(&eingabe[len], &wert)
+                                            : parseUInt(&eingabe[len], &wert);
 
-                    if (parseUInt(&eingabe[len], &wert)){
+                    if (ok){
                         cmd[i].argHandler(wert);
                     }
                     else {
@@ -810,7 +847,7 @@ static void adcLpHist(void){
 
 /* Umrechnungsparameter: Rückmeldung bzw. Fehlermeldung */
 static void paramSetReply(bool ok, const char *cmd, const char *what,
-                          unsigned int wert, const char *unit){
+                          unsigned int wert, uint16_t dec, const char *unit){
     system();
     if (!ok){
         sends("invalid argument for: ");
@@ -822,23 +859,23 @@ static void paramSetReply(bool ok, const char *cmd, const char *what,
     sends(what);
     sends(" set to: ");
     cyan();
-    sendNum(wert);
+    sendFixed(wert, dec);                 /* dec = 1: wert in Zehnteln */
     sends(unit);
     standardColour();
     linebreak(1);
 }
 
-/* V_R+ für die Umrechnung in mV (ändert nicht die Referenz selbst) */
+/* V_R+ für die Umrechnung, wert in 0,1 mV (ändert nicht die Referenz selbst) */
 static void adcVref(unsigned int wert){
-    paramSetReply(adcVrefSet((uint16_t)wert), "adcvref_", "V_R+", wert, " mV");
+    paramSetReply(adcVrefSet((uint16_t)wert), "adcvref_", "V_R+", wert, 1u, " mV");
 }
 
-/* Spannung der Signalquelle (Versorgung des Teilers) in mV */
+/* Spannung der Signalquelle (Versorgung des Teilers), wert in 0,1 mV */
 static void adcVsrc(unsigned int wert){
-    paramSetReply(adcVsrcSet((uint16_t)wert), "adcvsrc_", "source voltage", wert, " mV");
+    paramSetReply(adcVsrcSet((uint16_t)wert), "adcvsrc_", "source voltage", wert, 1u, " mV");
 }
 
 /* Festwiderstand R_1 des Spannungsteilers in Ohm */
 static void adcR1(unsigned int wert){
-    paramSetReply(adcR1Set((uint16_t)wert), "adcr1_", "R_1", wert, " Ohm");
+    paramSetReply(adcR1Set((uint16_t)wert), "adcr1_", "R_1", wert, 0u, " Ohm");
 }

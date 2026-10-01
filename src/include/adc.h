@@ -159,9 +159,10 @@ bool adcGet(uint16_t *n);
 uint16_t adcLast(void);
 
 /* Umrechnungsparameter (Befehle adcvref_, adcvsrc_, adcr1_).
-   Set-Funktionen liefern false bei 0 */
-bool     adcVrefSet(uint16_t mv);     /* V_R+ in mV                         */
-bool     adcVsrcSet(uint16_t mv);     /* Spannung der Signalquelle in mV    */
+   Spannungen in 0,1 mV (1 ... 65535 = 0,1 ... 6553,5 mV), R_1 in Ohm.
+   Set-Funktionen liefern false bei 0, Get-Funktionen liefern dieselben Einheiten */
+bool     adcVrefSet(uint16_t mv_x10); /* V_R+ in 0,1 mV                      */
+bool     adcVsrcSet(uint16_t mv_x10); /* Spannung der Signalquelle in 0,1 mV */
 bool     adcR1Set(uint16_t ohm);      /* Festwiderstand R_1 in Ohm          */
 uint16_t adcVrefGet(void);
 uint16_t adcVsrcGet(void);
