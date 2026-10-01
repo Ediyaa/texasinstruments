@@ -22,15 +22,18 @@
    REFVSEL_0 = 1,5 V, REFVSEL_1 = 2,0 V, REFVSEL_2 = 2,5 V */
 #define ADC_REFVSEL          REFVSEL_2
 
-/* V_R+ in mV, Nennwert passend zu ADC_REFVSEL (SLAS590P, Tabelle 8.41) */
+/* V_R+ in mV für die Umrechnung, Nennwert passend zu ADC_REFVSEL
+   (SLAS590P, Tabelle 8.41). Startwert, mit adcvref_ zur Laufzeit änderbar.
+   Ändert nur die Umrechnung, nicht die Referenz selbst (ADC_REFVSEL) */
 #define ADC_VREF_MV          2500UL
 
 /* Wartezeit nach Bit REFON in MCLK-Takten.
    t_SETTLE höchstens 75 us (SLAS590P, Tabelle 8.41) -> 400 Takte reichen bis MCLK = 5,3 MHz */
 #define ADC_REF_SETTLE_CYCLES 400u
 
-/* Versorgung des Spannungsteilers in mV (3V3 des LaunchPads, Nennwert).
-   Geht in den Widerstand ein, weil V_R+ nicht die Versorgung des Teilers ist */
+/* Spannung der Signalquelle = Versorgung des Spannungsteilers in mV
+   (3V3 des LaunchPads, Nennwert). Geht in den Widerstand ein, weil V_R+ nicht
+   die Versorgung des Teilers ist. Startwert, mit adcvsrc_ zur Laufzeit änderbar */
 #define ADC_VCC_MV           3300UL
 
 /* ---------- Takt und Abtastzeit (Normalbetrieb und Histogramm) ---------- */
@@ -46,8 +49,15 @@
 /* Bitfeld ADC12SHT0x: Abtastzeit 1024 Takte ADC12CLK */
 #define ADC_SHT0             ADC12SHT0_12
 
-/* Festwiderstand R_1 des Spannungsteilers in Ohm */
+/* Festwiderstand R_1 des Spannungsteilers in Ohm.
+   Startwert, mit adcr1_ zur Laufzeit änderbar (1 ... 65535 Ohm) */
 #define ADC_R1_OHM           1000UL
+
+/* Nachkommastellen der Mittelwerte (Histogramme): N und U mit ADC_MEAN_DEC,
+   R mit ADC_OHM_DEC Stellen. Höchstens 4 bzw. 2: dann bleibt adcFixedToOhm
+   auch bei den größten einstellbaren Parametern innerhalb von 64 Bit */
+#define ADC_MEAN_DEC         4u
+#define ADC_OHM_DEC          2u
 
 /* Lage von R_T im Spannungsteiler:
    1 -> V_CC - R_1 - Mittelknoten - R_T - GND  (R_T unten)
@@ -148,11 +158,31 @@ bool adcGet(uint16_t *n);
    ohne ihn abzuholen */
 uint16_t adcLast(void);
 
+/* Umrechnungsparameter (Befehle adcvref_, adcvsrc_, adcr1_).
+   Set-Funktionen liefern false bei 0 */
+bool     adcVrefSet(uint16_t mv);     /* V_R+ in mV                         */
+bool     adcVsrcSet(uint16_t mv);     /* Spannung der Signalquelle in mV    */
+bool     adcR1Set(uint16_t ohm);      /* Festwiderstand R_1 in Ohm          */
+uint16_t adcVrefGet(void);
+uint16_t adcVsrcGet(void);
+uint16_t adcR1Get(void);
+
 /* Übersetzung N -> Eingangsspannung in mV */
 uint16_t adcToMillivolt(uint16_t n);
 
 /* Übersetzung N -> Widerstand R_T in Ohm (ADC_OHM_INVALID bei Division durch 0) */
 uint32_t adcToOhm(uint16_t n);
+
+/* Mittelwert sum / n als Festkommazahl mit ADC_MEAN_DEC Nachkommastellen
+   (N * 10^ADC_MEAN_DEC), kaufmännisch gerundet. n = 0 liefert 0 */
+uint32_t adcMeanFixed(uint32_t sum, uint32_t n);
+
+/* Festkomma-N (wie adcMeanFixed) -> Spannung in mV * 10^ADC_MEAN_DEC */
+uint64_t adcFixedToMillivolt(uint32_t nq);
+
+/* Festkomma-N (wie adcMeanFixed) -> R_T in Ohm * 10^ADC_OHM_DEC.
+   Liefert false, wenn R_T nicht bestimmbar ist (V_in >= V_CC oder N = 0) */
+bool adcFixedToOhm(uint32_t nq, uint64_t *rq);
 
 /* Übersetzung N -> Temperatur in 0,01 °C (ADC_TEMP_INVALID bei ungültigem R_T) */
 int32_t adcToCentiCelsius(uint16_t n);

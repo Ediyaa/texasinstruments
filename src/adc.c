@@ -5,6 +5,11 @@
 /* ---------- interner Zustand ---------- */
 
 static volatile uint16_t s_value;      /* letzter Wert aus ADC12MEM0 */
+
+/* Umrechnungsparameter, Startwerte aus adc.h, mit adcvref_, adcvsrc_, adcr1_ änderbar */
+static uint16_t s_vref_mv = (uint16_t)ADC_VREF_MV;   /* V_R+ in mV                      */
+static uint16_t s_vsrc_mv = (uint16_t)ADC_VCC_MV;    /* Spannung der Signalquelle in mV */
+static uint16_t s_r1_ohm  = (uint16_t)ADC_R1_OHM;    /* Festwiderstand R_1 in Ohm       */
 static volatile bool     s_new_value;  /* true, wenn noch nicht abgeholt */
 
 /* Messblock für adcBlockCapture. NOINIT: die 4 KB werden beim Start nicht genullt */
@@ -234,18 +239,18 @@ uint16_t adcLast(void)
 /* V_in = N * V_R+ / 4095 (SLAU208Q, 28.2.1), kaufmännisch gerundet */
 uint16_t adcToMillivolt(uint16_t n)
 {
-    return (uint16_t)(((uint32_t)n * ADC_VREF_MV + 4095UL / 2UL) / 4095UL);
+    return (uint16_t)(((uint32_t)n * s_vref_mv + 4095UL / 2UL) / 4095UL);
 }
 
 /* Teiler an V_CC, gemessen gegen V_R+:  V_in = N * V_R+ / 4095
    R_T unten: R_T = R_1 * N * V_R+ / (4095 * V_CC - N * V_R+)
    R_T oben:  R_T = R_1 * (4095 * V_CC - N * V_R+) / (N * V_R+)
-   V_CC = ADC_VCC_MV (Nennwert), V_R+ = ADC_VREF_MV, kaufmännisch gerundet.
+   V_CC = s_vsrc_mv, V_R+ = s_vref_mv, R_1 = s_r1_ohm, kaufmännisch gerundet.
    64 Bit, weil R_1 * 4095 * V_CC über 32 Bit hinausgeht */
 uint32_t adcToOhm(uint16_t n)
 {
-    uint64_t u_in  = (uint64_t)n * ADC_VREF_MV;     /* 4095 * V_in in mV */
-    uint64_t u_ges = 4095ULL * ADC_VCC_MV;           /* 4095 * V_CC in mV */
+    uint64_t u_in  = (uint64_t)n * s_vref_mv;       /* 4095 * V_in in mV */
+    uint64_t u_ges = 4095ULL * s_vsrc_mv;            /* 4095 * V_CC in mV */
     uint64_t zaehler;
     uint64_t nenner;
 
@@ -254,10 +259,10 @@ uint32_t adcToOhm(uint16_t n)
     }
 
 #if ADC_RT_LOW_SIDE
-    zaehler = (uint64_t)ADC_R1_OHM * u_in;
+    zaehler = (uint64_t)s_r1_ohm * u_in;
     nenner  = u_ges - u_in;
 #else
-    zaehler = (uint64_t)ADC_R1_OHM * (u_ges - u_in);
+    zaehler = (uint64_t)s_r1_ohm * (u_ges - u_in);
     nenner  = u_in;
 #endif
 
@@ -266,6 +271,106 @@ uint32_t adcToOhm(uint16_t n)
     }
 
     return (uint32_t)((zaehler + nenner / 2ULL) / nenner);
+}
+
+/* ---------- Umrechnungsparameter ---------- */
+
+bool adcVrefSet(uint16_t mv)
+{
+    if (mv == 0u) {
+        return false;
+    }
+    s_vref_mv = mv;
+    return true;
+}
+
+bool adcVsrcSet(uint16_t mv)
+{
+    if (mv == 0u) {
+        return false;
+    }
+    s_vsrc_mv = mv;
+    return true;
+}
+
+bool adcR1Set(uint16_t ohm)
+{
+    if (ohm == 0u) {
+        return false;
+    }
+    s_r1_ohm = ohm;
+    return true;
+}
+
+uint16_t adcVrefGet(void)
+{
+    return s_vref_mv;
+}
+
+uint16_t adcVsrcGet(void)
+{
+    return s_vsrc_mv;
+}
+
+uint16_t adcR1Get(void)
+{
+    return s_r1_ohm;
+}
+
+/* ---------- Umrechnung mit Nachkommastellen (Mittelwerte) ---------- */
+
+/* 10^d */
+static uint64_t adc_pow10(uint16_t d)
+{
+    uint64_t p = 1ULL;
+
+    while (d-- > 0u) {
+        p *= 10ULL;
+    }
+    return p;
+}
+
+uint32_t adcMeanFixed(uint32_t sum, uint32_t n)
+{
+    if (n == 0UL) {
+        return 0UL;
+    }
+    return (uint32_t)(((uint64_t)sum * adc_pow10(ADC_MEAN_DEC) + n / 2UL) / n);
+}
+
+/* U = N * V_R+ / 4095, N und U jeweils mit 10^ADC_MEAN_DEC skaliert */
+uint64_t adcFixedToMillivolt(uint32_t nq)
+{
+    return ((uint64_t)nq * s_vref_mv + 4095ULL / 2ULL) / 4095ULL;
+}
+
+/* Wie adcToOhm, aber N mit 10^ADC_MEAN_DEC skaliert, Ergebnis in Ohm * 10^ADC_OHM_DEC.
+   Größter Zähler: 65535 * 4095 * 65535 * 10^4 * 10^2 = 1,76e19 < 2^64 = 1,84e19 */
+bool adcFixedToOhm(uint32_t nq, uint64_t *rq)
+{
+    uint64_t u_in  = (uint64_t)nq * s_vref_mv;                         /* 4095 * V_in * 10^D */
+    uint64_t u_ges = 4095ULL * s_vsrc_mv * adc_pow10(ADC_MEAN_DEC);    /* 4095 * V_CC * 10^D */
+    uint64_t zaehler;
+    uint64_t nenner;
+
+    if (u_in >= u_ges) {
+        return false;                                                  /* V_in >= V_CC */
+    }
+
+#if ADC_RT_LOW_SIDE
+    zaehler = (uint64_t)s_r1_ohm * u_in * adc_pow10(ADC_OHM_DEC);
+    nenner  = u_ges - u_in;
+#else
+    zaehler = (uint64_t)s_r1_ohm * (u_ges - u_in) * adc_pow10(ADC_OHM_DEC);
+    nenner  = u_in;
+#endif
+
+    if (nenner == 0ULL) {
+        return false;
+    }
+
+    *rq = (zaehler + nenner / 2ULL) / nenner;
+    return true;
 }
 
 /* Steinhart-Hart: 1/T = A + B * ln(R_T) + C * (ln(R_T))^3,

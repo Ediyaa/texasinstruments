@@ -49,6 +49,9 @@ static void adcHist(void);
 static void adcLpRate(unsigned int wert);
 static void adcLpHist(void);
 static void adcLpTau(unsigned int wert);
+static void adcVref(unsigned int wert);
+static void adcVsrc(unsigned int wert);
+static void adcR1(unsigned int wert);
 
 volatile bool adcstreamflag = false;
 
@@ -109,6 +112,9 @@ static const command_t adc_cmds[] = {
     { "adchist",   adcHist,   NULL, NULL, NULL, NULL },
     { "adclprate_", NULL,     adcLpRate, "<INTEGER[1,3]> 1=1kHz 2=10kHz 3=100kHz", NULL, NULL },
     { "adclptau_", NULL,      adcLpTau, "<INTEGER[1,9]> tau = 2^K samples", NULL, NULL },
+    { "adcvref_",  NULL,      adcVref,  "<INTEGER[1,65535]> V_R+ in mV", NULL, NULL },
+    { "adcvsrc_",  NULL,      adcVsrc,  "<INTEGER[1,65535]> source voltage in mV", NULL, NULL },
+    { "adcr1_",    NULL,      adcR1,    "<INTEGER[1,65535]> R_1 in Ohm", NULL, NULL },
     { "adclphist", adcLpHist, NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
@@ -548,32 +554,79 @@ static void sendNumPad(unsigned int n, unsigned int w){
     sendNum(n);
 }
 
-/* Mittelwert sum / n mit ADC_HIST_MEAN_DEC Nachkommastellen ausgeben,
-   kaufmännisch gerundet. 64 Bit, weil sum * 10^Stellen über 32 Bit hinausgeht */
-static void sendMean(uint32_t sum, uint32_t n){
+/* 64-Bit-Zahl ausgeben (höchstens 20 Ziffern) */
+static void sendNumLL(uint64_t n){
+    char buf[21];
+    int  i = 20;
+
+    buf[i] = '\0';
+    do {
+        buf[--i] = (char)('0' + (int)(n % 10ULL));
+        n /= 10ULL;
+    } while (n != 0ULL);
+
+    sends(&buf[i]);
+}
+
+/* Festkommazahl q mit dec Nachkommastellen ausgeben (q = Wert * 10^dec) */
+static void sendFixed(uint64_t q, uint16_t dec){
     uint64_t scale = 1ULL;
-    uint64_t q;
     uint64_t t;
-    uint32_t frac;
+    uint64_t frac;
     uint16_t d;
 
-    if (n == 0UL){
-        sends("-");
-        return;
-    }
-
-    for (d = 0u; d < ADC_HIST_MEAN_DEC; d++){
+    for (d = 0u; d < dec; d++){
         scale *= 10ULL;
     }
 
-    q    = ((uint64_t)sum * scale + n / 2UL) / n;
-    frac = (uint32_t)(q % scale);
-
-    sendNumL((unsigned long)(q / scale));
-    sendc('.');
-    for (t = scale / 10ULL; t > 0ULL; t /= 10ULL){   /* genau ADC_HIST_MEAN_DEC Ziffern */
-        sendc((char)('0' + (frac / (uint32_t)t) % 10u));
+    frac = q % scale;
+    sendNumLL(q / scale);
+    if (dec == 0u){
+        return;
     }
+    sendc('.');
+    for (t = scale / 10ULL; t > 0ULL; t /= 10ULL){      /* genau dec Ziffern */
+        sendc((char)('0' + (int)((frac / t) % 10ULL)));
+    }
+}
+
+/* Eine Zeile Mittelwert: N, Spannung und Widerstand */
+static void meanPrint(const char *label, uint32_t sum, uint32_t n){
+    uint32_t nq;
+    uint64_t rq;
+
+    system();
+    sends(label);
+
+    if (n == 0UL){
+        sends("-");
+        linebreak(1);
+        return;
+    }
+
+    nq = adcMeanFixed(sum, n);
+
+    cyan();
+    sendFixed(nq, ADC_MEAN_DEC);
+    standardColour();
+
+    sends("  U: ");
+    cyan();
+    sendFixed(adcFixedToMillivolt(nq), ADC_MEAN_DEC);
+    sends(" mV");
+    standardColour();
+
+    sends("  R: ");
+    cyan();
+    if (adcFixedToOhm(nq, &rq)){
+        sendFixed(rq, ADC_OHM_DEC);
+        sends(" Ohm");
+    }
+    else {
+        sends("invalid");
+    }
+    standardColour();
+    linebreak(1);
 }
 
 /* Balken, min, max und Werte außerhalb des Fensters ausgeben */
@@ -624,17 +677,10 @@ static void histPrint(const adcHist_t *h){
     sendNum(h->above);
     linebreak(1);
 
-    /* Mittelwert aller gezählten Werte und der zugehörigen Rohwerte */
-    system();
-    sends("mean: ");
-    cyan();
-    sendMean(h->sum, h->n);
-    standardColour();
-    sends("  raw mean: ");
-    cyan();
-    sendMean(h->sum_raw, h->n);
-    standardColour();
-    linebreak(1);
+    /* Mittelwerte der gezählten Werte und der zugehörigen Rohwerte,
+       jeweils mit Spannung und Widerstand */
+    meanPrint("mean:     ", h->sum, h->n);
+    meanPrint("raw mean: ", h->sum_raw, h->n);
 }
 
 /* Histogramm aufnehmen und als Balkendiagramm ausgeben.
@@ -760,4 +806,39 @@ static void adcLpHist(void){
     linebreak(1);
 
     histPrint(&h);
+}
+
+/* Umrechnungsparameter: Rückmeldung bzw. Fehlermeldung */
+static void paramSetReply(bool ok, const char *cmd, const char *what,
+                          unsigned int wert, const char *unit){
+    system();
+    if (!ok){
+        sends("invalid argument for: ");
+        red();
+        sends(cmd);
+        linebreak(1);
+        return;
+    }
+    sends(what);
+    sends(" set to: ");
+    cyan();
+    sendNum(wert);
+    sends(unit);
+    standardColour();
+    linebreak(1);
+}
+
+/* V_R+ für die Umrechnung in mV (ändert nicht die Referenz selbst) */
+static void adcVref(unsigned int wert){
+    paramSetReply(adcVrefSet((uint16_t)wert), "adcvref_", "V_R+", wert, " mV");
+}
+
+/* Spannung der Signalquelle (Versorgung des Teilers) in mV */
+static void adcVsrc(unsigned int wert){
+    paramSetReply(adcVsrcSet((uint16_t)wert), "adcvsrc_", "source voltage", wert, " mV");
+}
+
+/* Festwiderstand R_1 des Spannungsteilers in Ohm */
+static void adcR1(unsigned int wert){
+    paramSetReply(adcR1Set((uint16_t)wert), "adcr1_", "R_1", wert, " Ohm");
 }
