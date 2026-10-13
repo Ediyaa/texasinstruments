@@ -69,6 +69,16 @@
    0 -> V_CC - R_T - Mittelknoten - R_1 - GND  (R_T oben) */
 #define ADC_RT_LOW_SIDE      0
 
+/* ---------- Kalibrierwerte (Befehl adcpreset) ----------
+   Ergebnis der Kalibrierung mit Multimeter und bekannten Widerständen.
+   adcpreset setzt die Laufzeitparameter auf diese Werte */
+#define ADC_PRESET_VREF_X10    24946u   /* V_R+ = 2494,6 mV            (adcvref_)   */
+#define ADC_PRESET_VSRC_X10    32986u   /* V_CC = 3298,6 mV            (adcvsrc_)   */
+#define ADC_PRESET_R1_OHM      1002u    /* wirksames R_1 im Aufbau     (adcr1_)     */
+#define ADC_PRESET_OFFSET_X100 (-59)    /* Offset -0,59 Stufen         (adcoffset_) */
+#define ADC_PRESET_BLK_RATE    3u       /* 100 kHz                     (adclprate_) */
+#define ADC_PRESET_LP_SHIFT    6u       /* tau = 2^6 = 64 Werte        (adclptau_)  */
+
 /* Rückgabewert von adcToOhm, wenn R_T unendlich wäre (Division durch 0) */
 #define ADC_OHM_INVALID      0xFFFFFFFFUL
 

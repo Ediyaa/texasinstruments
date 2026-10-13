@@ -61,6 +61,8 @@ static void adcVref(unsigned int wert);
 static void adcVsrc(unsigned int wert);
 static void adcR1(unsigned int wert);
 static void adcOffset(unsigned int wert);
+static void adcStatus(void);
+static void adcPreset(void);
 
 volatile bool adcstreamflag = false;
 
@@ -126,6 +128,8 @@ static const command_t adc_cmds[] = {
     { "adcoffset_", NULL,     adcOffset, "<DECIMAL[-327.67,327.67]> ADC offset in LSB, e.g. -0.59", NULL, NULL, ARG_SHUND },
     { "adcr1_",    NULL,      adcR1,    "<INTEGER[1,65535]> R_1 in Ohm", NULL, NULL },
     { "adclphist", adcLpHist, NULL, NULL, NULL, NULL },
+    { "adcstatus", adcStatus, NULL, NULL, NULL, NULL },
+    { "adcpreset", adcPreset, NULL, NULL, NULL, NULL },
     { NULL,        NULL,      NULL, NULL, NULL, NULL }
 };
 
@@ -959,4 +963,105 @@ static void adcOffset(unsigned int wert){
     sends(" LSB");
     standardColour();
     linebreak(1);
+}
+
+/* Offset in Stufen ausgeben, o in 0,01 Stufen mit Vorzeichen */
+static void offsetPrint(int16_t o){
+    if (o < 0){
+        sendc('-');
+    }
+    sendFixed((uint64_t)((o < 0) ? -(int32_t)o : (int32_t)o), 2u);
+    sends(" LSB");
+}
+
+/* Eine Zeile der Statusausgabe beginnen: "System: <label>" und Farbe cyan */
+static void statusLabel(const char *label){
+    system();
+    sends(label);
+    cyan();
+}
+
+/* Eine Zeile der Statusausgabe abschließen */
+static void statusEnd(void){
+    standardColour();
+    linebreak(1);
+}
+
+/* Alle aktuellen Einstellungen des ADC ausgeben */
+static void adcStatus(void){
+
+    static const char *const unit[] = { "N (raw)", "mV", "Ohm", "\xc2\xb0""C" };
+
+    statusLabel("V_R+ (adcvref_):             ");
+    sendFixed(adcVrefGet(), 1u);
+    sends(" mV");
+    statusEnd();
+
+    statusLabel("source voltage (adcvsrc_):   ");
+    sendFixed(adcVsrcGet(), 1u);
+    sends(" mV");
+    statusEnd();
+
+    statusLabel("R_1 (adcr1_):                ");
+    sendNum(adcR1Get());
+    sends(" Ohm");
+    statusEnd();
+
+    statusLabel("offset (adcoffset_):         ");
+    offsetPrint(adcOffsetGet());
+    statusEnd();
+
+    statusLabel("block rate (adclprate_):     ");
+    sendNum(adcBlockRateGet());
+    sends(" = ");
+    sendNumL(adcBlockRateHz());
+    sends(" Hz");
+    statusEnd();
+
+    statusLabel("lowpass tau (adclptau_):     ");
+    lpTauPrint();
+    statusEnd();
+
+    statusLabel("unit (adcunit_):             ");
+    sends(unit[adcunit]);
+    statusEnd();
+
+    statusLabel("mean filter (adcmean):       ");
+    sends(adcMeanGet() ? "ON" : "OFF");
+    statusEnd();
+
+    statusLabel("lowpass filter (adclowpass): ");
+    sends(adcLowpassGet() ? "ON" : "OFF");
+    statusEnd();
+
+    statusLabel("stream (adcstream):          ");
+    sends(adcstreamflag ? "ON" : "OFF");
+    statusEnd();
+}
+
+/* Laufzeitparameter auf die Kalibrierwerte ADC_PRESET_... (adc.h) setzen.
+   Filter, Einheit und Stream bleiben unverändert */
+static void adcPreset(void){
+    bool ok = true;
+
+    ok &= adcVrefSet(ADC_PRESET_VREF_X10);
+    ok &= adcVsrcSet(ADC_PRESET_VSRC_X10);
+    ok &= adcR1Set(ADC_PRESET_R1_OHM);
+    adcOffsetSet(ADC_PRESET_OFFSET_X100);
+    ok &= adcBlockRateSet(ADC_PRESET_BLK_RATE);
+    ok &= adcLpShiftSet(ADC_PRESET_LP_SHIFT);
+
+    system();
+    if (!ok){
+        red();
+        sends("adcpreset: invalid value in ADC_PRESET_... (adc.h)");
+        standardColour();
+        linebreak(1);
+    }
+    else {
+        sends("ADC calibration values set:");
+        linebreak(1);
+    }
+
+    adcStatus();
 }
