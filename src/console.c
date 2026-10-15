@@ -108,6 +108,9 @@ static void line_show(const char *s){
 static void history_add(const char *s){
     if (s[0] == '\0') return;
 
+    /* gleicher Befehl wie der letzte Eintrag: nicht noch einmal speichern */
+    if (hist_count > 0 && strcmp(history[hist_count - 1], s) == 0) return;
+
     if (hist_count < HIST_MAX){
         strcpy(history[hist_count], s);
         hist_count++;

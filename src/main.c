@@ -38,21 +38,14 @@ int main(void)
 //   while(1){
 //        led_switch();
 //    }
-    uint16_t adcValue;
-
     while(1){
-
 
         console_task();
 
-        if (adcGet(&adcValue)) {
-            /* Verarbeitung von adcValue (0 ... 4095) folgt später */
-            if (adcstreamflag) {
-                adcPrint(adcValue);
-                linebreak(1);
-            }
+        /* Befehl adcstream: ein Durchlauf je Schleife, dazwischen
+           werden Eingaben auf der Konsole bearbeitet */
+        if (adcstreamflag) {
+            adcStreamStep();
         }
-
-
     }
 }
